@@ -7,73 +7,78 @@ import pydeck as pdk
 # 1. Konfiguration
 st.set_page_config(page_title="Invest-Scout Pro 2026", layout="wide")
 
-# API Setup mit Fehlerprüfung
+# API Setup mit automatischer Modell-Prüfung
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    # Wir nutzen 'gemini-1.5-flash', da es am stabilsten verfügbar ist
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # KORREKTUR: Wir nutzen den stabilen Namen 'gemini-1.5-flash-latest'
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 except Exception as e:
-    st.error(f"Verbindung zum KI-Gehirn fehlgeschlagen: {e}")
+    st.error(f"KI-Verbindungsproblem: {e}")
     st.stop()
 
-# 2. KI-Funktion
+# 2. KI-Funktion (Agenten-Gehirn)
 def ask_gemini(query, image=None):
     try:
-        content = [f"Du bist ein Immobilien-Agent. Analysiere für 2026: {query}"]
+        # Instruktion für den Agenten
+        instruction = "Du bist ein Immobilien-Experte. Scanne den Markt und gib Investitions-Tipps für 2026."
+        content = [instruction, f"Kunden-Anfrage: {query}"]
+        
         if image:
             content.append(image)
+            
         response = model.generate_content(content)
         return response.text
     except Exception as e:
-        return f"Die KI hat gerade Funkstille. Fehler: {e}"
+        return f"Agenten-Fehler: {e}. Tipp: Überprüfe, ob dein API-Key für Gemini 1.5 Flash freigeschaltet ist."
 
 # 3. Das Dashboard Layout
-st.title("🏢 Invest-Scout Pro: Agenten-Zentrale")
+st.title("🤖 Invest-Scout Pro: Agenten-Zentrale")
 
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
     st.subheader("🔍 Analyse-Auftrag")
-    query = st.text_area("Befehl", placeholder="Suche Penthouse in Malaga...", height=100)
-    file = st.file_uploader("Foto hochladen", type=["jpg", "png", "jpeg"])
+    query = st.text_area("Befehl an den Agenten", placeholder="Suche Penthouse in Malaga...", height=120)
+    file = st.file_uploader("Objekt-Foto hochladen", type=["jpg", "png", "jpeg"])
     
-    if st.button("🚀 Agenten-Analyse starten", use_container_width=True):
+    if st.button("🚀 Agenten beauftragen", use_container_width=True):
         if query:
-            with st.spinner("KI scannt den Markt..."):
+            with st.spinner("KI-Agent durchsucht das Netz..."):
                 img = Image.open(file) if file else None
                 st.session_state.last_result = ask_gemini(query, img)
         else:
-            st.warning("Bitte Befehl eingeben.")
+            st.warning("Bitte gib eine Anfrage ein.")
 
 with col_right:
     st.subheader("📍 Markt-Hotspots")
     
-    # Sicherer Karten-Datensatz
+    # Karte (jetzt funktionsfähig)
     df = pd.DataFrame({
         'lat': [36.72, 39.46, 40.41, 41.38, 39.57],
         'lon': [-4.42, -0.37, -3.70, 2.17, 2.65]
     })
 
-    # Karte ohne Mapbox-Abhängigkeit
     st.pydeck_chart(pdk.Deck(
-        map_style=None, # Verhindert "Missing Token" Fehler
+        map_style=None,
         initial_view_state=pdk.ViewState(
-            latitude=40.0, longitude=-3.7, zoom=5, pitch=45
+            latitude=36.72, longitude=-4.42, zoom=7, pitch=45
         ),
         layers=[
             pdk.Layer(
                 'ScatterplotLayer',
                 data=df,
                 get_position='[lon, lat]',
-                get_color='[197, 255, 0, 200]',
-                get_radius=30000,
+                get_color='[197, 255, 0, 160]',
+                get_radius=10000,
             ),
         ],
     ))
 
-# Ergebnisse unterhalb
+# Ergebnisanzeige
 if 'last_result' in st.session_state:
     st.divider()
     st.markdown("### 📩 Ergebnisbericht")
+    # Hier wird das Ergebnis in einer schönen Box angezeigt
     st.info(st.session_state.last_result)
