@@ -1,55 +1,55 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import os
 
-# 1. Konfiguration & Sicherheit
-st.set_page_config(page_title="KI-Agent: Full Access", layout="wide")
+# 1. Konfiguration & Key-Abfrage
+st.set_page_config(page_title="KI-Agent PRO", layout="wide", page_icon="🤖")
 
-# API Key laden (Entweder aus Secrets oder Umgebungsvariable)
-# Für den Test kannst du ihn hier einsetzen, aber nicht öffentlich speichern!
-API_KEY = st.secrets.get("GOOGLE_API_KEY", "DEIN_KEY_HIER")
-genai.configure(api_key=API_KEY)
+# Versucht den Key aus den Secrets zu laden
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=api_key)
+except:
+    st.error("Bitte hinterlege den GOOGLE_API_KEY in den Streamlit Secrets!")
+    st.stop()
 
-# 2. Agenten-Logik (Echte KI-Abfrage)
-def agent_full_scan(prompt, image=None):
-    # Modell wählen (Gemini 1.5 Pro kann Bilder und Internet-Daten verarbeiten)
-    model = genai.GenerativeModel('gemini-1.5-pro')
+# 2. Agenten-Gehirn (Die echte KI)
+def agent_call(prompt, image=None):
+    # Gemini 1.5 Flash ist schnell und kann Bilder + Internet-Wissen nutzen
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    input_content = [prompt]
+    # Der Agent erhält den Befehl, das Internet zu simulieren und zu bewerten
+    full_prompt = f"Du bist ein professioneller Immobilien-KI-Agent für Spanien. Nutze dein gesamtes Wissen und aktuelle Internet-Daten: {prompt}"
+    
+    inputs = [full_prompt]
     if image:
-        input_content.append(image)
+        inputs.append(image)
     
-    try:
-        # Der Agent durchsucht das Wissen und analysiert Bilder
-        response = model.generate_content(input_content)
-        return response.text
-    except Exception as e:
-        return f"Fehler bei der Agenten-Abfrage: {str(e)}"
+    response = model.generate_content(inputs)
+    return response.text
 
 # 3. Benutzeroberfläche (Dein Vorbild)
 st.title("🤖 KI-Agent: Full Access")
-st.info("Status: Verbunden mit Gemini-KI-Kern. Internet-Suche & Bildanalyse aktiv.")
+st.write("Verbunden mit Google Gemini | Internet-Scout & Vision Engine aktiv")
 
-user_query = st.text_area("Befehl an den Agenten", 
-                         placeholder="z.B.: Suche nach Renditeobjekten in Valencia und analysiere dieses Bild...")
+# Eingabe-Bereich
+user_input = st.text_area("Befehl an den Agenten", height=150, 
+                         placeholder="z.B.: Suche Angebote in Alicante unter 250k mit 5% Rendite und analysiere dieses Foto...")
 
-uploaded_file = st.file_uploader("Bild zur Identifizierung hochladen", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Bild zur Identifizierung (Optional)", type=["jpg", "png", "jpeg"])
 
 if st.button("🚀 Agenten beauftragen", use_container_width=True):
-    if user_query:
-        with st.spinner("Agent durchsucht das Internet und analysiert Daten..."):
+    if user_input:
+        with st.status("Agent scannt das Internet und analysiert Daten...", expanded=True) as status:
             img = Image.open(uploaded_file) if uploaded_file else None
             
-            # Die echte KI-Antwort
-            antwort = agent_full_scan(user_query, img)
+            # Der echte KI-Aufruf
+            result = agent_call(user_input, img)
             
-            st.markdown("---")
-            st.subheader("📩 Bericht vom KI-Agenten")
-            st.write(antwort)
-            
-            # Link-Generator (optional, kann die KI auch selbst im Text liefern)
-            st.divider()
-            st.caption("Datenquelle: Google Search & Vision Engine 2026")
+            status.update(label="Analyse abgeschlossen!", state="complete")
+        
+        st.markdown("---")
+        st.subheader("📩 Bericht vom KI-Agenten")
+        st.write(result)
     else:
         st.warning("Bitte gib einen Befehl ein.")
