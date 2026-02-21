@@ -1,38 +1,41 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import pandas as pd
 
-# ... (Dein bisheriger Setup-Code mit API Key) ...
+# 1. Seite konfigurieren
+st.set_page_config(page_title="KI-Agent PRO", layout="wide")
 
-# NEU: Verbesserte Agenten-Anweisung für präzisere Vergleiche
-def agent_call_pro(prompt, image=None):
-    model = genai.GenerativeModel('gemini-1.5-pro') # Pro-Modell für tiefere Analysen
-    
-    system_instruction = """
-    Du bist ein Elite-Immobilien-Agent in Spanien. 
-    1. Wenn ein Bild hochgeladen wird, identifiziere den Ort, Baustil und Zustand.
-    2. Suche im Internet nach Vergleichswerten für diesen Standort.
-    3. Erstelle eine Tabelle mit: Preis, geschätzter Rendite und Investment-Risiko (1-10).
-    4. Gib eine klare 'Kauf'- oder 'Warten'-Empfehlung.
-    """
-    
-    full_prompt = f"{system_instruction}\n\nUser-Anfrage: {prompt}"
-    
-    inputs = [full_prompt]
-    if image:
-        inputs.append(image)
-    
-    response = model.generate_content(inputs)
-    return response.text
+# 2. API Key sicher laden
+try:
+    # Sucht in den Streamlit Secrets nach GOOGLE_API_KEY
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    st.sidebar.success("✅ KI-Verbindung aktiv")
+except Exception as e:
+    st.sidebar.error("❌ API Key fehlt oder falsch")
+    st.info("Bitte trage den Key in den Streamlit 'Secrets' ein.")
+    st.stop()
 
-# --- ERWEITERTES UI ---
-with st.sidebar:
-    st.header("⚙️ Agenten-Tuning")
-    st.slider("Risiko-Toleranz", 1, 10, 5)
-    st.checkbox("Nebenkosten einrechnen (ITP/IVA)", value=True)
-    st.markdown("---")
-    if st.button("Analyse als PDF exportieren"):
-        st.toast("PDF wird generiert... (Funktion in Vorbereitung)")
+# 3. Das Interface
+st.title("🤖 Dein KI-Immo-Agent")
 
-# (Der Rest bleibt wie in deiner app.py, aber wir nutzen agent_call_pro)
+user_query = st.text_area("Befehl an den Agenten:", placeholder="Suche Immobilien in...")
+uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "jpeg", "png"])
+
+if st.button("🚀 Agenten beauftragen"):
+    if user_query:
+        with st.spinner("Agent arbeitet..."):
+            try:
+                content = [user_query]
+                if uploaded_file:
+                    img = Image.open(uploaded_file)
+                    content.append(img)
+                
+                response = model.generate_content(content)
+                st.markdown("### 📩 Analyse-Ergebnis")
+                st.write(response.text)
+            except Exception as e:
+                st.error(f"Fehler bei der Analyse: {e}")
+    else:
+        st.warning("Bitte gib einen Text ein.")
