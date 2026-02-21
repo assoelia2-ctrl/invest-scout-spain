@@ -1,12 +1,12 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import os
 
-# 1. Konfiguration der Seite
 st.set_page_config(page_title="Invest-Scout Spain 2026", layout="wide")
 st.title("🏠 Invest-Scout Spain: KI-Immobilien-Analyst")
 
-# 2. API Key Logik (aus Secrets oder Seitenleiste)
+# Key-Logik
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
@@ -14,46 +14,33 @@ else:
 
 if api_key:
     try:
-        # Verbindung konfigurieren
+        # FORCE: Wir sagen der Bibliothek explizit, welche API-Version sie nutzen soll
+        os.environ["GOOGLE_API_USE_MTLS"] = "never"
         genai.configure(api_key=api_key)
         
-        # DAS IST DER FIX: Wir nutzen die sicherste Modell-Bezeichnung
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # Wir nutzen das stabilste Modell
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         col1, col2 = st.columns([1, 1])
-
         with col1:
             st.header("Input & Analyse")
-            uploaded_file = st.file_uploader("Bild der Immobilie hochladen...", type=["jpg", "jpeg", "png"])
-            if uploaded_file:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Objekt Scan", use_container_width=True)
-            
-            user_query = st.text_area("Details (Z.B. Budget 300k, Malaga, Fokus auf Rendite):")
+            uploaded_file = st.file_uploader("Bild hochladen...", type=["jpg", "jpeg", "png"])
+            user_query = st.text_area("Details zum Investment:", placeholder="Z.B. Suche Haus in Malaga...")
             analyze_button = st.button("🚀 Strategie-Check starten")
 
         with col2:
-            st.header("Ergebnis: Strategisches Exposé")
+            st.header("Ergebnis")
             if analyze_button:
-                if not uploaded_file and not user_query:
-                    st.warning("Bitte gib Daten ein.")
-                else:
-                    with st.spinner("KI analysiert..."):
-                        # Input-Liste sauber aufbauen
-                        content_parts = []
-                        if uploaded_file:
-                            content_parts.append(image)
-                        if user_query:
-                            content_parts.append(user_query)
-                        else:
-                            content_parts.append("Analysiere diese Immobilie in Spanien.")
-                        
-                        # Generierung starten
-                        response = model.generate_content(content_parts)
-                        st.markdown(response.text)
+                with st.spinner("KI analysiert..."):
+                    inputs = []
+                    if uploaded_file:
+                        inputs.append(Image.open(uploaded_file))
+                    inputs.append(user_query if user_query else "Analysiere dieses Objekt.")
+                    
+                    response = model.generate_content(inputs)
+                    st.markdown(response.text)
                         
     except Exception as e:
         st.error(f"Fehler: {e}")
-        st.info("Sollte der 404-Fehler bleiben, könnte dein API-Key in einer Region ohne Zugriff auf Flash liegen (eher selten).")
 else:
     st.info("Bitte API Key eingeben.")
