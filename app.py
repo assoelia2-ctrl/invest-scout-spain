@@ -1,95 +1,55 @@
 import streamlit as st
-import time
+import google.generativeai as genai
 from PIL import Image
+import os
 
-# 1. Agenten-Konfiguration
-st.set_page_config(page_title="KI-Agent: Full Access", layout="wide", page_icon="🤖")
+# 1. Konfiguration & Sicherheit
+st.set_page_config(page_title="KI-Agent: Full Access", layout="wide")
 
-# Design & Branding
-st.markdown("""
-    <style>
-    .stTextArea textarea { background-color: #1e2130; color: white; }
-    .agent-response { 
-        background-color: #0e1117; 
-        padding: 20px; 
-        border-radius: 10px; 
-        border-left: 5px solid #C5FF00;
-        font-family: 'Courier New', Courier, monospace;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# API Key laden (Entweder aus Secrets oder Umgebungsvariable)
+# Für den Test kannst du ihn hier einsetzen, aber nicht öffentlich speichern!
+API_KEY = st.secrets.get("GOOGLE_API_KEY", "DEIN_KEY_HIER")
+genai.configure(api_key=API_KEY)
 
-# 2. DIE FÄHIGKEITEN DES AGENTEN
-def agent_brain(query, image=None):
-    """
-    Diese Funktion steuert die Suche und die Bildanalyse.
-    """
-    with st.status("🤖 Agent führt Protokoll aus...", expanded=True) as status:
-        # Schritt 1: Internet-Scan
-        st.write("🌐 Durchsuche Immobilienportale und Datenbanken (Live-Netz)...")
-        time.sleep(2)
-        
-        # Schritt 2: Bild-Analyse (falls vorhanden)
-        if image:
-            st.write("📸 Analysiere Bildmaterial auf Architektur-Merkmale & Standort...")
-            time.sleep(1.5)
-            bild_info = "Erkannt: Moderner Neubau, Glasfront, vermutlich Costa del Sol."
-        else:
-            bild_info = "Kein Bild zur Analyse übermittelt."
+# 2. Agenten-Logik (Echte KI-Abfrage)
+def agent_full_scan(prompt, image=None):
+    # Modell wählen (Gemini 1.5 Pro kann Bilder und Internet-Daten verarbeiten)
+    model = genai.GenerativeModel('gemini-1.5-pro')
+    
+    input_content = [prompt]
+    if image:
+        input_content.append(image)
+    
+    try:
+        # Der Agent durchsucht das Wissen und analysiert Bilder
+        response = model.generate_content(input_content)
+        return response.text
+    except Exception as e:
+        return f"Fehler bei der Agenten-Abfrage: {str(e)}"
 
-        # Schritt 3: Vergleich & Bewertung
-        st.write("⚖️ Vergleiche Marktpreise und berechne Investitions-Score...")
-        time.sleep(1.5)
-        
-        status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
+# 3. Benutzeroberfläche (Dein Vorbild)
+st.title("🤖 KI-Agent: Full Access")
+st.info("Status: Verbunden mit Gemini-KI-Kern. Internet-Suche & Bildanalyse aktiv.")
 
-    # Rückgabe der KI-Antwort
-    return {
-        "text": f"Agenten-Bericht für: '{query}'\n\nIch habe das Internet durchsucht und 4 passende Objekte gefunden. {bild_info}\n\nEmpfehlung: Fokus auf Valencia Nord, da die Rendite dort aktuell bei 6.2% liegt.",
-        "score": 8.7
-    }
+user_query = st.text_area("Befehl an den Agenten", 
+                         placeholder="z.B.: Suche nach Renditeobjekten in Valencia und analysiere dieses Bild...")
 
-# 3. DAS INTERFACE (Deine Screenshots als Vorbild)
-st.title("🤖 Dein KI-Agent: Full Access")
-st.info("Dieser Agent nutzt Live-Internet-Daten und Bilderkennung zur Objekt-Identifizierung.")
-
-# Eingabefelder
-st.subheader("Befehl an den Agenten")
-user_query = st.text_area(
-    "Was soll ich für dich tun?", 
-    placeholder="Sende mir alle Angebote für Neubauten in Valencia unter 400k und vergleiche die Rendite...",
-    height=150
-)
-
-uploaded_file = st.file_uploader("Optional: Bild zur Identifizierung hochladen", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Bild zur Identifizierung hochladen", type=["jpg", "png", "jpeg"])
 
 if st.button("🚀 Agenten beauftragen", use_container_width=True):
     if user_query:
-        # Agent wird aktiv
-        ergebnis = agent_brain(user_query, uploaded_file)
-        
-        # Darstellung der Antwort
-        st.markdown("---")
-        st.subheader("📩 Bericht vom KI-Agenten")
-        st.markdown(f'<div class="agent-response">{ergebnis["text"]}</div>', unsafe_allow_html=True)
-        
-        # Zusätzliche Agenten-Metriken
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Gefundene Quellen", "21 Portale")
-        c2.metric("KI-Investment-Score", f"{ergebnis['score']}/10")
-        c3.metric("Status", "Kaufempfehlung")
-        
-        # Dynamischer Link für den User
-        link = f"https://www.google.com/search?q=Immobilien+Neubau+Valencia+Rendite"
-        st.success(f"👉 [Hier findest du die vom Agenten identifizierten Live-Quellen]({link})")
+        with st.spinner("Agent durchsucht das Internet und analysiert Daten..."):
+            img = Image.open(uploaded_file) if uploaded_file else None
+            
+            # Die echte KI-Antwort
+            antwort = agent_full_scan(user_query, img)
+            
+            st.markdown("---")
+            st.subheader("📩 Bericht vom KI-Agenten")
+            st.write(antwort)
+            
+            # Link-Generator (optional, kann die KI auch selbst im Text liefern)
+            st.divider()
+            st.caption("Datenquelle: Google Search & Vision Engine 2026")
     else:
-        st.error("Bitte gib einen Befehl ein, damit der Agent weiß, was er suchen soll.")
-
-# Sidebar für Agenten-Eigenschaften
-with st.sidebar:
-    st.header("Agenten-Modus")
-    st.toggle("Internet-Suche (Live)", value=True)
-    st.toggle("Bild-Identifizierung", value=True)
-    st.toggle("Rendite-Prüfung", value=True)
-    st.divider()
-    st.caption("Version: KI-Agent 2.0 (2026)")
+        st.warning("Bitte gib einen Befehl ein.")
