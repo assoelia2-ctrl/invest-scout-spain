@@ -5,14 +5,14 @@ import pandas as pd
 import pydeck as pdk
 import datetime
 import re
-import os
+import io
 
 # 1. Konfiguration & KI-Setup
 st.set_page_config(page_title="Invest-Scout: Málaga Pro", layout="wide", page_icon="🏢")
 
-# API-Verbindung mit Fallback-Logik
+# API-Verbindung
 try:
-    # Sucht erst in Secrets, dann in Umgebungsvariablen
+    # Sucht erst in Secrets nach dem Key
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
     elif "GOOGLE_API_KEY" in st.secrets:
@@ -22,7 +22,6 @@ try:
 
     if api_key:
         genai.configure(api_key=api_key)
-        # Wir nutzen das stabilste Modell direkt beim Namen
         model = genai.GenerativeModel('gemini-1.5-flash')
     else:
         st.warning("Bitte hinterlege einen API Key in den Streamlit Secrets.")
@@ -38,9 +37,8 @@ if 'visit_history' not in st.session_state:
 def run_expert_ai(query, image=None):
     instruction = """
     Du bist ein Senior-Immobilien-Analyst für Málaga, Spanien im Jahr 2026.
-    Wenn der User eine Suchanfrage stellt:
     1. Analysiere das Potenzial der Region/des Budgets.
-    2. Gib Tipps zur aktuellen Marktlage und rechtlichen Besonderheiten (z.B. Tourismus-Lizenzen).
+    2. Gib Tipps zur Marktlage und Tourismus-Lizenzen.
     3. Erstelle am Ende IMMER dieses Kurz-Fazit:
     SCORE: [Wert 1-10]
     RENDITE: [Wert in %]
@@ -54,7 +52,6 @@ def run_expert_ai(query, image=None):
     response = model.generate_content(content)
     text = response.text
     
-    # Daten-Extraktion mit Regex (verbesserte Fehlertoleranz)
     try:
         score = re.search(r"SCORE:\s*(\d+)", text).group(1)
         rendite = re.search(r"RENDITE:\s*([\d,.]+%?)", text).group(1)
@@ -73,7 +70,7 @@ tabs = st.tabs(["🔍 Live-Suche & Analyse", "⚖️ Mein Portfolio", "📍 Regi
 # --- TAB 1: DIE SUCHE ---
 with tabs[0]:
     st.subheader("Welche Immobilie suchen wir heute?")
-    search_query = st.text_input("Deine Suchanfrage", placeholder="Ich suche eine Finca in Málaga bis 250.000 Euro...")
+    search_query = st.text_input("Deine Suchanfrage", placeholder="Ich suche eine Finca in Málaga...")
     
     col_input, col_vision = st.columns([2, 1])
     with col_input:
@@ -81,70 +78,69 @@ with tabs[0]:
     with col_vision:
         uploaded_file = st.file_uploader("Optional: Foto analysieren", type=["jpg", "png", "jpeg"])
 
-    if st.button("🚀 Markt-Analyse & Angebote finden", use_container_width=True):
+    if st.button("🚀 Markt-Analyse starten", use_container_width=True):
         if search_query:
             with st.spinner("Agent scannt den Markt..."):
                 img = Image.open(uploaded_file) if uploaded_file else None
                 bericht, score, rendite, risiko, max_p = run_expert_ai(f"{search_query} Budget: {budget}€", img)
                 
-                # Speichern für den Vergleich
                 st.session_state.visit_history.append({
                     "Datum": datetime.date.today().strftime("%d.%m.%Y"),
-                    "Objekt": search_query[:30] + "...",
-                    "Preis": f"{budget:,} €",
+                    "Objekt": search_query[:40],
+                    "Budget_Anfrage": f"{budget} €",
                     "Score": score,
                     "Rendite": rendite,
                     "Risiko": risiko,
-                    "Max-Preis": max_p,
-                    "Bericht": bericht
+                    "Max_Empfehlung": max_p
                 })
                 
-                # Anzeige
                 st.success(f"Analyse abgeschlossen (Score: {score}/10)")
                 st.markdown(bericht)
-                
-                # LIVE-LINKS GENERATOR
                 st.divider()
-                st.subheader("🔗 Sofort zu den Live-Angeboten")
                 
                 l_col, r_col = st.columns(2)
-                url_idealista = f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}"
-                url_kyero = f"https://www.kyero.com/de/malaga-provinz-immobilien-kaufen-0l3?max_price={budget}"
-                
                 with l_col:
-                    st.link_button("🏠 Idealista (Málaga Local)", url_idealista, use_container_width=True)
+                    st.link_button("🏠 Idealista", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}", use_container_width=True)
                 with r_col:
-                    st.link_button("🌍 Kyero (International)", url_kyero, use_container_width=True)
+                    st.link_button("🌍 Kyero", f"https://www.kyero.com/de/malaga-provinz-immobilien-kaufen-0l3?max_price={budget}", use_container_width=True)
         else:
             st.warning("Bitte gib ein, was du suchst!")
 
-# --- TAB 2: PORTFOLIO ---
+# --- TAB 2: PORTFOLIO & EXPORT ---
 with tabs[1]:
     if st.session_state.visit_history:
-        st.subheader("⚖️ Deine Suchhistorie & Favoriten")
+        st.subheader("⚖️ Deine Suchhistorie")
         df = pd.DataFrame(st.session_state.visit_history)
-        st.dataframe(df[["Datum", "Score", "Objekt", "Preis", "Max-Preis", "Rendite", "Risiko"]].sort_values(by="Score", ascending=False), use_container_width=True)
-        if st.button("Historie löschen"):
-            st.session_state.visit_history = []
-            st.rerun()
+        
+        # Tabelle anzeigen
+        st.dataframe(df.sort_values(by="Score", ascending=False), use_container_width=True)
+        
+        # EXPORT FUNKTION
+        csv = df.to_csv(index=False).encode('utf-8')
+        
+        col_dl, col_del = st.columns(2)
+        with col_dl:
+            st.download_button(
+                label="📥 Als Excel (CSV) herunterladen",
+                data=csv,
+                file_name=f"Malaga_Invest_Export_{datetime.date.today()}.csv",
+                mime='text/csv',
+                use_container_width=True
+            )
+        with col_del:
+            if st.button("🗑️ Historie löschen", use_container_width=True):
+                st.session_state.visit_history = []
+                st.rerun()
     else:
         st.info("Noch keine Suchen durchgeführt.")
 
 # --- TAB 3: KARTE ---
 with tabs[2]:
     st.subheader("📍 Málaga Immobilien-Hotspots")
-    # Fokus auf Málaga Stadt und Umland
     view = pdk.ViewState(latitude=36.7212, longitude=-4.4214, zoom=10, pitch=45)
     st.pydeck_chart(pdk.Deck(
         map_style='mapbox://styles/mapbox/light-v9',
         initial_view_state=view, 
-        layers=[
-            pdk.Layer(
-                'ScatterplotLayer', 
-                data=pd.DataFrame({'lat':[36.7212],'lon':[-4.4214]}), 
-                get_position='[lon, lat]', 
-                get_color='[255, 75, 75, 160]', 
-                get_radius=2000
-            )
-        ]
+        layers=[pdk.Layer('ScatterplotLayer', data=pd.DataFrame({'lat':[36.7212],'lon':[-4.4214]}), 
+                get_position='[lon, lat]', get_color='[255, 75, 75, 160]', get_radius=2000)]
     ))
