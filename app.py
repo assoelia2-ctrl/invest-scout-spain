@@ -3,9 +3,10 @@ import google.generativeai as genai
 from PIL import Image
 import pandas as pd
 import pydeck as pdk
+import datetime
 
 # 1. Initiale Konfiguration
-st.set_page_config(page_title="Invest-Scout Spain 2026", layout="wide")
+st.set_page_config(page_title="Invest-Scout Pro 2026", layout="wide", page_icon="🏢")
 
 # API Key Laden
 try:
@@ -13,16 +14,24 @@ try:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
 except:
-    st.error("API Key fehlt in den Secrets!")
+    st.error("API Key fehlt in den Streamlit Secrets!")
     st.stop()
 
-# 2. Agenten-Funktion (Die Intelligenz)
-def run_agent_analysis(query, image=None):
-    # System-Anweisung für professionelle Ergebnisse
+# Session State für die Historie initialisieren
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+# 2. Agenten-Logik (Erweiterte Analyse)
+def run_pro_analysis(query, image=None):
     instruction = """
-    Du bist ein Immobilien-KI-Agent. Analysiere das Objekt präzise.
-    Gib mir Daten für: Preis/m2, geschätzte Rendite und Lage-Rating.
-    Antworte strukturiert und professionell.
+    Du bist ein Senior-Immobilienanalyst. 
+    Untersuche das Objekt oder die Region extrem detailliert.
+    STRUKTUR:
+    - ZUSAMMENFASSUNG: (Max 2 Sätze)
+    - INVESTMENT-DATEN: (Preisschätzung, Erwartete Rendite in %, Risiko 1-10)
+    - STANDORT-CHECK: (Infrastruktur, Trends 2026)
+    - BILD-ANALYSE: (Falls Bild vorhanden: Zustand, Besonderheiten)
+    Gib am Ende immer eine klare EMPFEHLUNG ab.
     """
     inputs = [instruction + "\n\nAnfrage: " + query]
     if image:
@@ -31,46 +40,74 @@ def run_agent_analysis(query, image=None):
     response = model.generate_content(inputs)
     return response.text
 
-# 3. Das User Interface (Dashboard)
-st.title("🤖 KI-Agent: Investment-Zentrale")
-st.markdown("---")
+# 3. Benutzeroberfläche (Single Page Workflow)
+st.title("🏢 Invest-Scout Pro: KI-Agenten-Zentrale")
+st.caption(f"Status: Online | Datum: {datetime.date.today().strftime('%d.%m.%Y')}")
 
-# Eingabe-Sektion
-col_input, col_map = st.columns([1, 1])
+# Layout: Links Eingabe & Historie, Rechts Karte & Ergebnis
+col_left, col_right = st.columns([1, 1.2])
 
-with col_input:
-    user_query = st.text_area("Befehl an den Agenten", placeholder="Analysiere dieses Objekt in Malaga...")
-    uploaded_file = st.file_uploader("Bild zur Identifizierung", type=["jpg", "png", "jpeg"])
+with col_left:
+    st.subheader("🔍 Neue Analyse")
+    user_query = st.text_area("Befehl an den Agenten", placeholder="Suche Penthouse in Marbella bis 600k...", height=120)
+    uploaded_file = st.file_uploader("Objekt-Foto hochladen (Vision Engine)", type=["jpg", "png", "jpeg"])
     
-    # Finanz-Parameter für die Berechnung
-    with st.expander("💰 Finanz-Parameter"):
-        zins = st.slider("Sollzins (%)", 1.0, 6.0, 3.5)
-        ek = st.number_input("Eigenkapital (€)", value=50000)
+    with st.expander("⚙️ Experten-Filter"):
+        zins = st.slider("Zinssatz (%)", 0.0, 8.0, 3.8)
+        strategie = st.selectbox("Strategie", ["Maximale Rendite", "Eigennutzung", "Fix & Flip"])
 
-with col_map:
-    # Hier bereiten wir die Karte vor (Beispieldaten für den Standort)
-    st.subheader("📍 Standort-Vorschau")
-    # Demo-Punkt (wird später dynamisch durch die KI gesetzt)
-    map_data = pd.DataFrame({'lat': [36.72], 'lon': [-4.42]})
+    if st.button("🚀 Agenten-Analyse starten", use_container_width=True):
+        if user_query:
+            with st.status("Agent durchsucht das Internet & analysiert Vision-Daten...", expanded=True) as status:
+                img = Image.open(uploaded_file) if uploaded_file else None
+                ergebnis = run_pro_analysis(user_query, img)
+                
+                # In Historie speichern
+                st.session_state.history.append({"query": user_query, "result": ergebnis, "date": datetime.datetime.now()})
+                status.update(label="Analyse abgeschlossen!", state="complete")
+            
+            st.session_state.current_result = ergebnis
+        else:
+            st.warning("Bitte gib eine Anfrage ein.")
+
+    # Historie-Bereich (Sidebar-Ersatz)
+    if st.session_state.history:
+        st.divider()
+        st.subheader("📜 Letzte Analysen")
+        for i, item in enumerate(reversed(st.session_state.history[-5:])):
+            if st.button(f"{item['date'].strftime('%H:%M')} - {item['query'][:30]}...", key=f"hist_{i}"):
+                st.session_state.current_result = item['result']
+
+with col_right:
+    # Karten-Modul
+    st.subheader("📍 Regionaler Markt-Fokus")
+    map_data = pd.DataFrame({'lat': [36.51, 36.72, 39.57], 'lon': [-4.88, -4.42, 2.65]}) # Beispielpunkte
     st.pydeck_chart(pdk.Deck(
         map_style='mapbox://styles/mapbox/dark-v9',
-        initial_view_state=pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=12, pitch=50),
-        layers=[pdk.Layer('ScatterplotLayer', data=map_data, get_position='[lon, lat]', get_color='[197, 255, 0]', get_radius=200)]
+        initial_view_state=pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=6, pitch=45),
+        layers=[
+            pdk.Layer(
+                'HexagonLayer',
+                data=map_data,
+                get_position='[lon, lat]',
+                radius=5000,
+                elevation_scale=50,
+                elevation_range=[0, 1000],
+                extruded=True,
+            ),
+        ],
     ))
 
-# Ausführung
-if st.button("🚀 Tiefen-Analyse starten", use_container_width=True):
-    if user_query:
-        with st.status("Agent scannt das Internet...", expanded=True):
-            img = Image.open(uploaded_file) if uploaded_file else None
-            ergebnis = run_agent_analysis(user_query, img)
+    # Ergebnisanzeige
+    if 'current_result' in st.session_state:
+        st.markdown("---")
+        st.subheader("📩 Aktueller Agenten-Bericht")
+        st.info(st.session_state.current_result)
         
-        # Ergebnisanzeige in Tabs
-        t1, t2 = st.tabs(["📝 KI-Bericht", "📈 Rendite-Prognose"])
-        with t1:
-            st.markdown(ergebnis)
-        with t2:
-            st.metric("ROI Schätzung", "6.4%", "+0.5% vs. Markt")
-            st.write(f"Kalkuliert mit {zins}% Zinsen und {ek}€ Eigenkapital.")
-    else:
-        st.warning("Bitte gib eine Anfrage ein.")
+        # Action Buttons
+        c1, c2 = st.columns(2)
+        with c1:
+            st.button("📄 PDF Export", on_click=lambda: st.toast("Export gestartet..."))
+        with c2:
+            idealista_url = f"https://www.idealista.com/de/"
+            st.link_button("🌐 Live-Angebote prüfen", idealista_url)
