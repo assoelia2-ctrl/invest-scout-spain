@@ -3,84 +3,88 @@ import google.generativeai as genai
 from PIL import Image
 import pandas as pd
 import pydeck as pdk
+import datetime
 
 # 1. Initiale Konfiguration
-st.set_page_config(page_title="Invest-Scout Pro: Málaga", layout="wide", page_icon="🏠")
+st.set_page_config(page_title="Invest-Scout: Málaga Pro", layout="wide", page_icon="🏠")
 
-# API Setup (Automatische Modellwahl)
+# API Setup
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-    model_name = next((m for m in available_models if 'gemini-1.5-flash' in m), available_models[0])
-    model = genai.GenerativeModel(model_name)
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 except Exception as e:
     st.error(f"KI-Verbindungsproblem: {e}")
     st.stop()
 
-# 2. Agenten-Logik für Besichtigungen
-def run_inspection_ai(query, image=None):
-    instruction = """
-    Du bist ein Bau-Sachverständiger und Immobilien-Agent in Spanien. 
-    Wenn der User ein Bild hochlädt, analysiere es auf Mängel (Risse, Feuchtigkeit, Elektro).
-    Wenn der User Fragen stellt, erstelle eine spezifische Checkliste für Fincas in Málaga (AFO, Wasserrechte, Zufahrt).
-    Antworte kurz, präzise und fachlich fundiert.
-    """
-    inputs = [instruction + "\n\nAnfrage: " + query]
+# Session State für den Vergleichsspeicher initialisieren
+if 'visit_history' not in st.session_state:
+    st.session_state.visit_history = []
+
+# 2. Agenten-Logik
+def run_ai(query, image=None, mode="general"):
+    instruction = "Du bist ein Immobilien-Experte für Málaga."
+    if mode == "inspection":
+        instruction = "Du bist ein Bau-Sachverständiger. Analysiere Bilder auf Mängel (Risse, Feuchtigkeit) und bewerte das Investitionsrisiko."
+    
+    content = [instruction + "\n\nAnfrage: " + query]
     if image:
-        inputs.append(image)
-    response = model.generate_content(inputs)
+        content.append(image)
+    response = model.generate_content(content)
     return response.text
 
 # 3. Benutzeroberfläche
-st.title("🤖 Dein KI-Agent: Besichtigungs-Modus")
-st.markdown("---")
+st.title("🤖 Invest-Scout Pro: Málaga")
 
-# Navigation über Tabs
-tab_suche, tab_besichtigung = st.tabs(["🔍 Markt-Analyse", "📋 Besichtigungs-Check"])
+tabs = st.tabs(["🔍 Analyse", "📋 Besichtigung & Foto-Check", "⚖️ Objekt-Vergleich"])
 
-with tab_suche:
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.subheader("Neuer Suchauftrag")
-        user_query = st.text_area("Was suchst du?", placeholder="Suche Finca in der Axarquía bis 250k...", key="main_search")
-        if st.button("🚀 Markt scannen", use_container_width=True):
-            with st.spinner("Agent analysiert..."):
-                st.session_state.last_result = run_inspection_ai(user_query)
-    
-    with col2:
-        st.subheader("📍 Fokus-Region")
-        # Karte zentriert auf Málaga
+# TAB 1: MARKT-ANALYSE
+with tabs[0]:
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        query = st.text_area("Suchauftrag", "Finca bis 250k in Axarquía...")
+        if st.button("🚀 Markt-Scan"):
+            st.session_state.market_res = run_ai(query)
+    with c2:
         df = pd.DataFrame({'lat': [36.72], 'lon': [-4.42]})
-        st.pydeck_chart(pdk.Deck(
-            map_style=None,
-            initial_view_state=pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=9, pitch=45),
-            layers=[pdk.Layer('ScatterplotLayer', data=df, get_position='[lon, lat]', get_color='[197, 255, 0]', get_radius=5000)]
-        ))
-    
-    if 'last_result' in st.session_state:
-        st.info(st.session_state.last_result)
+        st.pydeck_chart(pdk.Deck(map_style=None, initial_view_state=pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=9),
+                                layers=[pdk.Layer('ScatterplotLayer', data=df, get_position='[lon, lat]', get_color='[197, 255, 0]', get_radius=5000)]))
+    if 'market_res' in st.session_state:
+        st.info(st.session_state.market_res)
 
-with tab_besichtigung:
-    st.subheader("📸 Live-Check vor Ort")
-    st.write("Lade ein Foto von der Besichtigung hoch (z.B. Fassade, Dach, Dokumente), um eine Sofort-Einschätzung zu erhalten.")
+# TAB 2: BESICHTIGUNG
+with tabs[1]:
+    st.subheader("📸 Live-Check & Speicherung")
+    obj_name = st.text_input("Name/Adresse des Objekts", placeholder="z.B. Finca Almáchar")
+    inspect_file = st.file_uploader("Foto hochladen", type=["jpg", "png", "jpeg"])
     
-    inspect_file = st.file_uploader("Foto zur Mängel-Analyse", type=["jpg", "png", "jpeg"], key="inspect_upload")
-    inspect_query = st.text_input("Spezielle Frage zum Objekt?", "Worauf muss ich hier besonders achten?")
-
-    if st.button("🧐 Objekt prüfen", use_container_width=True):
-        with st.spinner("KI-Gutachter analysiert..."):
+    if st.button("🧐 Analyse & Speichern"):
+        with st.spinner("Sachverständiger prüft..."):
             img = Image.open(inspect_file) if inspect_file else None
-            st.session_state.inspect_result = run_inspection_ai(inspect_query, img)
+            res = run_ai("Bewerte dieses Objekt/Foto", img, mode="inspection")
+            
+            # Objekt in Historie speichern
+            st.session_state.visit_history.append({
+                "Datum": datetime.date.today().strftime("%d.%m.%Y"),
+                "Objekt": obj_name,
+                "Bewertung": res[:150] + "...",
+                "Volltext": res
+            })
+            st.success(f"Objekt '{obj_name}' wurde zur Vergleichsliste hinzugefügt!")
+            st.markdown(res)
 
-    if 'inspect_result' in st.session_state:
-        st.success("### 🛠️ Agenten-Gutachten")
-        st.markdown(st.session_state.inspect_result)
+# TAB 3: VERGLEICH (Die neue Funktion)
+with tabs[2]:
+    st.subheader("⚖️ Deine Favoriten im Vergleich")
+    if st.session_state.visit_history:
+        comparison_df = pd.DataFrame(st.session_state.visit_history)
+        st.table(comparison_df[["Datum", "Objekt", "Bewertung"]])
         
-        # Interaktive Checkliste (Standard-Punkte)
-        st.markdown("---")
-        st.subheader("✅ Deine Sofort-Checkliste")
-        st.checkbox("Legalität: Liegt ein AFO-Zertifikat vor?")
-        st.checkbox("Wasser: Sind die Wasserrechte im 'Registro de Aguas' eingetragen?")
-        st.checkbox("Zufahrt: Ist der Weg öffentlich oder privat (Servidumbre de paso)?")
-        st.checkbox("Bausubstanz: Anzeichen von aufsteigender Feuchtigkeit (Salpeter)?")
+        selected_obj = st.selectbox("Wähle ein Objekt für den Detail-Bericht:", 
+                                   options=[item["Objekt"] for item in st.session_state.visit_history])
+        
+        detail = next(item for item in st.session_state.visit_history if item["Objekt"] == selected_obj)
+        st.write(f"**Vollständiges Gutachten für {selected_obj}:**")
+        st.info(detail["Volltext"])
+    else:
+        st.write("Noch keine Objekte gespeichert. Nutze den Besichtigungs-Check!")
