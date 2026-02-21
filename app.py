@@ -3,12 +3,12 @@ import pandas as pd
 import pydeck as pdk
 import numpy as np
 
-# Konfiguration (Muss die allererste Streamlit-Zeile sein!)
-st.set_page_config(page_title="Invest-Scout Spain PRO", layout="wide")
+# 1. Konfiguration
+st.set_page_config(page_title="Invest-Scout Spain 2026", layout="wide")
 
-# Daten-Funktion
+# 2. Daten laden (KI-Agent Basisdaten)
 @st.cache_data
-def load_data():
+def load_agent_data():
     data = {
         'city': ['Malaga', 'Marbella', 'Alicante', 'Palma', 'Madrid', 'Barcelona', 'Valencia'],
         'lat': [36.72, 36.51, 38.34, 39.57, 40.41, 41.38, 39.46],
@@ -18,67 +18,70 @@ def load_data():
     }
     return pd.DataFrame(data)
 
-df_spain = load_data()
+df = load_agent_data()
 
-# Titel
-st.title("🏠 Invest-Scout Spain PRO")
-st.caption("Echtzeit Investment-Analyse & Markt-Scout")
+# 3. Header
+st.title("🏠 Invest-Scout Spain")
+st.write("Dein KI-Agent für den spanischen Immobilienmarkt.")
+st.divider()
 
-# --- SIDEBAR ---
-with st.sidebar:
-    st.header("🔍 Suche & Filter")
-    stadt_wahl = st.selectbox("Fokus-Region", df_spain['city'].unique())
-    budget = st.number_input("Budget (€)", value=300000, step=10000)
-    objekttyp = st.multiselect("Typ", ["Wohnung", "Haus", "Finca"], default="Wohnung")
+# 4. Suche (Direkt auf der Hauptseite)
+with st.container():
+    st.subheader("🔍 Marktanalyse starten")
+    col_in1, col_in2 = st.columns(2)
     
+    with col_in1:
+        stadt_wahl = st.selectbox("Wähle eine Stadt", df['city'].unique())
+        budget = st.number_input("Dein Budget (€)", value=300000, step=10000)
+    
+    with col_in2:
+        objekttyp = st.multiselect("Objekttyp", ["Wohnung", "Haus", "Finca"], default="Wohnung")
+        search_btn = st.button("🚀 Jetzt analysieren", use_container_width=True)
+
+# 5. Ergebnisse (Erscheinen auf derselben Seite)
+if search_btn:
     st.divider()
-    search_triggered = st.button("🚀 Analyse jetzt starten", use_container_width=True)
-
-# --- HAUPTBEREICH ---
-if search_triggered:
-    selected_data = df_spain[df_spain['city'] == stadt_wahl].iloc[0]
+    selected = df[df['city'] == stadt_wahl].iloc[0]
     
-    # Spalten für Metriken
+    # Metriken
     m1, m2, m3 = st.columns(3)
-    m1.metric("Ø Preis / m²", f"{selected_data['price_m2']} €")
-    m2.metric("Mietrendite", f"{selected_data['yield']} %", "Top Wert")
-    m3.metric("Objekte im Budget", "142", "+12 neu")
+    m1.metric("Ø Preis / m²", f"{selected['price_m2']} €")
+    m2.metric("Rendite-Chance", f"{selected['yield']} %")
+    m3.metric("Status", "Top Investment")
 
     # Karte
-    st.subheader(f"Markt-Hotspots um {stadt_wahl}")
+    st.subheader(f"📍 Standort-Check: {stadt_wahl}")
     st.pydeck_chart(pdk.Deck(
-        map_style='mapbox://styles/mapbox/dark-v9',
+        map_style='mapbox://styles/mapbox/light-v9',
         initial_view_state=pdk.ViewState(
-            latitude=selected_data['lat'], 
-            longitude=selected_data['lon'], 
-            zoom=11, pitch=45
+            latitude=selected['lat'], longitude=selected['lon'], zoom=10, pitch=45
         ),
         layers=[
             pdk.Layer(
                 'ScatterplotLayer',
-                data=df_spain,
+                data=df,
                 get_position='[lon, lat]',
-                get_color='[197, 255, 0, 160]',
-                get_radius=500,
-                pickable=True,
+                get_color='[255, 75, 75, 150]',
+                get_radius=1000,
             ),
         ],
     ))
 
-    # Links & Tools
+    # Links & Rechner
     st.divider()
-    col_a, col_b = st.columns(2)
+    c_link, c_calc = st.columns(2)
     
-    with col_a:
-        st.subheader("🔗 Direkte Links")
-        link = f"https://www.idealista.com/de/buscar/venta-viviendas/{stadt_wahl.lower()}/"
-        st.markdown(f"**[👉 Öffne passende Angebote auf Idealista]({link})**")
-    
-    with col_b:
-        st.subheader("📊 Rendite-Rechner")
-        miete = st.slider("Erwartete Monatsmiete (€)", 500, 3000, 1200)
-        jahres_roi = (miete * 12 / budget) * 100
-        st.write(f"Dein berechneter Brutto-ROI: **{jahres_roi:.2f}%**")
+    with c_link:
+        st.subheader("🔗 Portale")
+        url = f"https://www.idealista.com/de/buscar/venta-viviendas/{stadt_wahl.lower()}/"
+        st.markdown(f"**[👉 Passende Objekte auf Idealista anzeigen]({url})**")
+        st.info("Klicke auf den Link, um direkt zu den Live-Angeboten zu springen.")
+
+    with c_calc:
+        st.subheader("📊 Schneller Rendite-Check")
+        miete = st.slider("Geschätzte Miete/Monat", 500, 4000, 1200)
+        roi = (miete * 12 / budget) * 100
+        st.write(f"Voraussichtlicher ROI: **{roi:.2f}% p.a.**")
 
 else:
-    st.info("Wähle links eine Region aus und klicke auf 'Analyse starten', um die Ergebnisse des KI-Agenten zu sehen.")
+    st.info("Gib deine Daten oben ein und klicke auf 'Jetzt analysieren', um die Karte und die Details zu sehen.")
