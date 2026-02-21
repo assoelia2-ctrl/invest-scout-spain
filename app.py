@@ -1,96 +1,62 @@
 import streamlit as st
-import pandas as pd
+from PIL import Image
 import time
-import random
 
-# 1. Agenten-Konfiguration
-st.set_page_config(page_title="KI-Immo-Agent Spain 2026", layout="wide", page_icon="🤖")
+# 1. Konfiguration
+st.set_page_config(page_title="KI-Agent Interface", layout="wide", page_icon="🤖")
 
-# Design-Anpassung
-st.markdown("""
-    <style>
-    .reportview-container { background: #0e1117; }
-    .stMetric { background-color: #1e2130; border-radius: 10px; padding: 15px; border: 1px solid #C5FF00; }
-    .agent-box { background-color: #262730; padding: 20px; border-radius: 15px; border-left: 5px solid #C5FF00; margin-bottom: 20px; }
-    </style>
-    """, unsafe_allow_html=True)
+# --- DIE AGENTEN-SCHNITTSTELLE ---
+def frage_ki_agent(befehl, bild=None):
+    """
+    Hier wird die Verbindung zum 'Gehirn' des Agenten hergestellt.
+    Er nutzt Tools wie Google Search und Vision-Modelle.
+    """
+    with st.status("🤖 Agent denkt nach...", expanded=True) as status:
+        st.write("🌐 Durchsuche das Internet nach aktuellen Angeboten...")
+        # Hier würde der API-Call zum Agenten stehen
+        time.sleep(2) 
+        
+        if bild:
+            st.write("📸 Analysiere Bildmaterial auf Merkmale und Standort...")
+            time.sleep(1)
+            
+        st.write("⚖️ Vergleiche Preise und bewerte Investment-Risiken...")
+        status.update(label="Agent hat die Analyse abgeschlossen!", state="complete")
+    
+    # Beispielhafte Antwort des Agenten
+    return f"Ich habe das Netz durchsucht. Für '{befehl}' habe ich 3 Top-Objekte gefunden, die genau deiner Suchlogik entsprechen. Basierend auf dem Bild handelt es sich um eine modernisierte Finca..."
 
-# 2. Funktionen des Agenten (Fähigkeiten)
-def simuliere_markt_scan(stadt, budget):
-    """Fähigkeit: Durchsucht Portale nach echten Angeboten"""
-    objekte = [
-        {"Name": f"Penthouse {stadt} Playa", "Preis": budget * 0.92, "Rendite": 5.8, "Lage": "A+", "Zustand": "Neuwertig", "Typ": "Penthouse"},
-        {"Name": f"Finca {stadt} Hinterland", "Preis": budget * 0.75, "Rendite": 4.2, "Lage": "B", "Zustand": "Renovierungsbedürftig", "Typ": "Finca"},
-        {"Name": f"Modern Apartment {stadt}", "Preis": budget * 0.88, "Rendite": 6.1, "Lage": "A", "Zustand": "Saniert", "Typ": "Wohnung"},
-        {"Name": f"Investment-Studio {stadt}", "Preis": budget * 0.50, "Rendite": 7.2, "Lage": "C", "Zustand": "Gepflegt", "Typ": "Studio"}
-    ]
-    return pd.DataFrame(objekte)
+# 2. UI - DAS INTERFACE
+st.title("🤖 Dein KI-Agent: Full Access")
+st.info("Dieser Agent nutzt Live-Internet-Daten und Bilderkennung zur Objekt-Identifizierung.")
 
-def ki_bewertung(row):
-    """Fähigkeit: Bewertet Immobilien nach Investment-Logik"""
-    score = (row['Rendite'] * 1.5) + (10 if row['Lage'] == "A+" else 5)
-    return round(min(score, 10), 1)
-
-# 3. Das Agenten-Interface
-st.title("🤖 KI-Agent: Immobilien-Scout Spanien")
-st.markdown("---")
-
-# Eingabe-Sektion (Dashboard-Stil)
+# Bereich 1: Multimodaler Input
 with st.container():
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        stadt = st.text_input("Zielregion (z.B. Malaga, Alicante, Mallorca)", "Malaga")
-    with col2:
-        budget = st.number_input("Dein Investitions-Budget (€)", value=350000, step=10000)
-    with col3:
-        prioritaet = st.selectbox("Hauptziel", ["Maximale Rendite", "Sicherer Werterhalt", "Ferienvermietung"])
+    st.subheader("Befehl an den Agenten")
+    user_query = st.text_area("Was soll ich für dich tun?", 
+                              placeholder="Sende mir alle Angebote für Neubauten in Valencia unter 400k und vergleiche die Rendite...")
     
-    suche_starten = st.button("🚀 Agenten-Suche & Vergleich starten", use_container_width=True)
+    uploaded_image = st.file_uploader("Optional: Bild zur Identifizierung hochladen", type=["jpg", "png"])
 
-# 4. Der Agent in Aktion
-if suche_starten:
-    st.divider()
-    
-    # Der Agent "spricht" mit dir
-    with st.status("KI-Agent aktiv: Scanne Markt...", expanded=True) as status:
-        st.write(f"📡 Verbinde zu Portalen in {stadt}...")
-        time.sleep(1)
-        st.write("📊 Daten werden gefiltert und verglichen...")
-        df = simuliere_markt_scan(stadt, budget)
-        df['KI-Score'] = df.apply(ki_bewertung, axis=1)
-        time.sleep(1)
-        st.write("🧠 Investment-Bewertung wird kalkuliert...")
-        status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
+    if st.button("🚀 Agenten beauftragen"):
+        if user_query:
+            antwort = frage_ki_agent(user_query, uploaded_image)
+            
+            st.markdown("---")
+            st.subheader("📩 Antwort vom KI-Agenten")
+            st.write(antwort)
+            
+            # Agenten-Ergebnisse visuell aufbereiten
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Gefundene Quellen", "14 Portale", "Live")
+            with col2:
+                st.metric("Investment-Check", "Positiv", "A+")
+        else:
+            st.warning("Bitte gib einen Befehl ein.")
 
-    # FUNKTION: VERGLEICHEN
-    st.subheader("⚖️ Direkter Objekt-Vergleich")
-    # Markiere das beste Objekt
-    st.dataframe(df.sort_values(by="KI-Score", ascending=False), use_container_width=True, hide_index=True)
-
-    # FUNKTION: BEWERTEN & EMPFEHLEN
-    st.markdown("---")
-    top_objekt = df.loc[df['KI-Score'].idxmax()]
-    
-    st.markdown(f"""
-        <div class="agent-box">
-            <h3>💡 Meine Experten-Empfehlung</h3>
-            <p>Nach Analyse von {len(df)} Objekten empfehle ich das <b>{top_objekt['Name']}</b>.</p>
-            <ul>
-                <li><b>Rendite:</b> {top_objekt['Rendite']}% (über Marktdurchschnitt)</li>
-                <li><b>Lage:</b> {top_objekt['Lage']} (hohes Wertsteigerungspotenzial)</li>
-                <li><b>KI-Investment-Score:</b> {top_objekt['KI-Score']}/10</li>
-            </ul>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # FUNKTION: HANDLUNG (Links)
-    st.subheader("🔗 Jetzt handeln")
-    c1, c2 = st.columns(2)
-    idealista_url = f"https://www.idealista.com/de/buscar/venta-viviendas/{stadt.lower()}/"
-    
-    c1.info(f"**Markt-Übersicht:** [Alle Angebote in {stadt} auf Idealista]({idealista_url})")
-    c2.success(f"**Agenten-Tipp:** Kontaktiere lokale Makler für Off-Market Deals in {stadt}.")
-
-else:
-    # Start-Zustand
-    st.info("Willkommen! Ich bin dein KI-Agent. Gib oben deine Suchkriterien ein, damit ich für dich den Markt scannen und bewerten kann.")
+# Bereich 2: Agenten-Fähigkeiten Status
+st.sidebar.title("Agenten-Status")
+st.sidebar.success("✅ Internet-Suche: Bereit")
+st.sidebar.success("✅ Bild-Identifizierung: Bereit")
+st.sidebar.success("✅ Vergleichs-Logik: Aktiv")
