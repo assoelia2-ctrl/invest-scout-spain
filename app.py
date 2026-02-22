@@ -3,14 +3,12 @@ import requests
 import pandas as pd
 import pydeck as pdk
 from PIL import Image
-import io
 
-# 1. SETUP (Bleibt unverändert)
+# 1. SETUP
 st.set_page_config(page_title="Málaga Invest Pro AI", layout="wide")
 groq_key = st.secrets.get("GROQ_API_KEY")
 
 def call_groq_agent(prompt):
-    """KI-Analyse über Groq Cloud."""
     if not groq_key: return "❌ Key fehlt."
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
@@ -20,43 +18,32 @@ def call_groq_agent(prompt):
         return response.json()['choices'][0]['message']['content']
     except: return "Agent beschäftigt..."
 
-# 2. SIDEBAR - NUR HIER WURDE DER FOTO-FIX IMPLEMENTIERT
+# 2. SIDEBAR (FOTO-LOGIK)
 with st.sidebar:
     st.header("👁️ Bild-Detektiv")
-    st.write("Foto hochladen (JPG, JPEG, PNG)")
+    # Einfacher Uploader ohne komplizierte Puffer
+    up_file = st.file_uploader("Bild wählen", type=["jpg", "jpeg", "png"], key="loader")
     
-    # Eindeutiger Key sorgt dafür, dass der Upload beim Klicken stabil bleibt
-    uploaded_file = st.file_uploader("Datei wählen", type=["jpg", "jpeg", "png"], key="sidebar_img_loader")
-    
-    if uploaded_file is not None:
-        # Bild wird direkt für die Anzeige verarbeitet
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Bild erkannt ✅", use_container_width=True)
-        
-        # DIESER BUTTON ERSCHEINT JETZT GARANTIERT NACH DEM UPLOAD
-        st.write("---")
-        if st.button("🔍 JETZT IM INTERNET SUCHEN", key="web_search_action", use_container_width=True):
-            st.success("Suche gestartet... Agent scannt Portale nach Übereinstimmungen.")
+    if up_file:
+        st.image(up_file, caption="Bild bereit", use_container_width=True)
+        # Der Button ist jetzt völlig unabhängig platziert
+        if st.button("🔍 IM NETZ SUCHEN", use_container_width=True):
+            st.info("Suche läuft...")
 
-# 3. HAUPTSEITE (LAYOUT & FUNKTIONEN EXAKT WIE VORHER)
+# 3. HAUPTSEITE
 st.title("🤖 Málaga Investment-Zentrale")
 
-col_main, col_side = st.columns([2, 1])
+c1, c2 = st.columns([2, 1])
+with c1:
+    query = st.text_input("Suche:", value="Finca bei Málaga")
+    price = st.number_input("Budget (€)", value=250000)
+with c2:
+    st.subheader("📊 Kosten")
+    itp = price * 0.07
+    st.write(f"Steuer (7%): {itp:,.0f} €")
+    st.write(f"Gesamt: {price+itp:,.0f} €")
 
-with col_main:
-    st.subheader("🔍 Suche & Analyse")
-    user_query = st.text_input("Suchanfrage oder Link:", value="Finca bei Málaga")
-    budget = st.number_input("Max. Budget (€)", value=250000, step=5000)
-
-with col_side:
-    st.subheader("📊 Investment-Check")
-    tax = budget * 0.07 # 7% ITP Steuer Andalusien
-    notary = budget * 0.01
-    st.table({
-        "Posten": ["Preis", "ITP (7%)", "Notar", "Gesamt"],
-        "€": [f"{budget:,.0f}", f"{tax:,.0f}", f"{notary:,.0f}", f"{budget+tax+notary:,.0f}"]
-    })
-
-# AKTION AUSFÜHREN (Karte, Analyse, Links)
-if st.button("🚀 Agent beauftragen & Angebote laden", use_container_width=True):
-    # ECHTE LINKS DEFINIEREN
+# 4. DER AKTION-BUTTON (Gereinigt von Einrückungsfehlern)
+if st.button("🚀 ANALYSE STARTEN", use_container_width=True):
+    # Definitionen ohne Umwege
+    i_url = f"
