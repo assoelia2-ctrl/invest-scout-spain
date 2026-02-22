@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+import requests
 import pandas as pd
 import pydeck as pdk
 import datetime
@@ -8,25 +8,28 @@ import re
 # 1. SETUP
 st.set_page_config(page_title="Málaga Invest Pro", layout="wide")
 
-# 2. DER DEFINITIVE FIX (Erzwingt v1 statt v1beta)
+# 2. DIE MANUELLE API-SCHNITTSTELLE (KEIN V1BETA MEHR!)
 api_key = st.secrets.get("GEMINI_API_KEY")
 
-if api_key:
-    # Wir konfigurieren die API und erzwingen die REST-Schnittstelle
-    # Das transport='rest' ist essenziell gegen den 404-Fehler
-    genai.configure(api_key=api_key, transport='rest')
+def call_gemini_manual(prompt):
+    # Wir bauen die URL von Hand für die stabile v1 Version
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
     
-    # Hier ist der Trick: Wir erstellen das Modell und sagen ihm 
-    # explizit, dass es die stabile API nutzen soll
-    model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    st.error("API Key fehlt in den Secrets!")
-    st.stop()
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        return response.json()['candidates'][0]['content']['parts'][0]['text']
+    else:
+        return f"Fehler: {response.status_code} - {response.text}"
 
+# Historie-Speicher
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# 3. DAS VOLLE DASHBOARD (Wie besprochen)
+# 3. DAS DASHBOARD
 st.title("🤖 Málaga Invest-Scout Pro")
 t1, t2, t3 = st.tabs(["🔍 Analyse", "⚖️ Portfolio", "📍 Karte"])
 
@@ -35,32 +38,34 @@ with t1:
     budget = st.slider("Budget (€)", 50000, 1000000, 300000)
     
     if st.button("🚀 Analyse starten", use_container_width=True):
-        try:
-            with st.spinner("KI kontaktiert Markt-Daten..."):
-                # Wir schicken die Anfrage ab
-                response = model.generate_content(f"Analysiere: {query}. Budget {budget}€. Ende mit SCORE: [1-10]")
-                
-                # Score finden
-                score = re.search(r"SCORE:\s*(\d+)", response.text).group(1) if "SCORE:" in response.text else "N/A"
-                st.session_state.history.append({"Datum": datetime.date.today(), "Suche": query, "Score": score})
-                
-                st.success(f"Analyse abgeschlossen! (Score: {score})")
-                st.markdown(response.text)
-                st.divider()
-                st.link_button("🏠 Zu Idealista", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}")
-        except Exception as e:
-            # Falls immer noch v1beta erscheint, erzwingen wir eine Fehlermeldung
-            st.error(f"Technischer Fehler: {str(e)}")
+        if not api_key:
+            st.error("API Key fehlt!")
+        else:
+            try:
+                with st.spinner("KI berechnet Investment..."):
+                    bericht = call_gemini_manual(f"Analysiere: {query}. Budget {budget}€. SCORE: [1-10]")
+                    
+                    # Score finden
+                    score_match = re.search(r"SCORE:\s*(\d+)", bericht)
+                    score = score_match.group(1) if score_match else "N/A"
+                    
+                    st.session_state.history.append({"Datum": datetime.date.today(), "Suche": query, "Score": score})
+                    st.success(f"Analyse abgeschlossen! (Score: {score}/10)")
+                    st.markdown(bericht)
+                    st.divider()
+                    st.link_button("🏠 Zu Idealista", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}")
+            except Exception as e:
+                st.error(f"Kritischer Fehler: {e}")
 
 with t2:
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
-        st.table(df)
+        st.dataframe(df, use_container_width=True)
         st.download_button("📥 Als CSV exportieren", df.to_csv(index=False).encode('utf-8'), "invest.csv")
     else:
-        st.info("Noch keine Daten.")
+        st.info("Noch keine Daten vorhanden.")
 
 with t3:
-    st.subheader("📍 Markt-Übersicht")
+    st.subheader("📍 Hotspots")
     view = pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=10)
     st.pydeck_chart(pdk.Deck(initial_view_state=view, layers=[pdk.Layer('ScatterplotLayer', data=pd.DataFrame({'lat':[36.72], 'lon':[-4.42]}), get_position='[lon, lat]', get_radius=1000, get_color='[200, 30, 0]')]))
