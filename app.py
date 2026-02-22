@@ -2,62 +2,53 @@ import streamlit as st
 import requests
 import pandas as pd
 import pydeck as pdk
-import datetime
 
-# SETUP
+# 1. SETUP
 st.set_page_config(page_title="Málaga Invest Pro", layout="wide")
-
-# API KEY aus Secrets laden
 api_key = st.secrets.get("GEMINI_API_KEY")
 
-def call_ki(prompt):
-    # Wir nutzen die stabilste Route: gemini-pro über v1beta
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+def call_ki_final(prompt):
+    # Wir nutzen die ABSOLUTE Standard-Route v1 (nicht v1beta)
+    # Und wir hängen den Key als Header an, nicht als URL-Parameter
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': api_key  # Key im Header ist sicherer
+    }
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
     
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text']
         else:
-            return f"Fehler: {response.status_code}. Bitte Key prüfen."
+            # Hier geben wir die genaue Google-Fehlermeldung aus
+            error_details = response.json().get('error', {}).get('message', 'Unbekannter Fehler')
+            return f"Google sagt: {error_details} (Code: {response.status_code})"
     except Exception as e:
-        return f"Verbindungsfehler: {e}"
+        return f"Verbindung fehlgeschlagen: {e}"
 
-if 'history' not in st.session_state:
-    st.session_state.history = []
-
+# UI
 st.title("🤖 Málaga Invest-Scout")
-
-# TABS FÜR DAS PORTFOLIO UND DIE KARTE
 tab1, tab2, tab3 = st.tabs(["🔍 Analyse", "⚖️ Portfolio", "📍 Karte"])
 
 with tab1:
     query = st.text_input("Deine Suchanfrage:", value="Finca in Málaga")
     if st.button("🚀 Markt-Analyse starten"):
         if not api_key:
-            st.error("API Key fehlt in den Secrets!")
+            st.error("Kein Key in den Secrets gefunden!")
         else:
-            with st.spinner("KI analysiert den Markt..."):
-                bericht = call_ki(f"Analysiere Immobilien-Investment: {query}. Gib Tipps für Málaga.")
-                st.session_state.history.append({"Datum": datetime.date.today(), "Anfrage": query})
-                st.markdown(bericht)
-                st.divider()
-                st.link_button("🏠 Zu Idealista", "https://www.idealista.com")
+            with st.spinner("Frage Google-Server an..."):
+                antwort = call_ki_final(f"Kurze Immobilien-Analyse für: {query} in Málaga.")
+                st.info(antwort)
 
 with tab2:
-    if st.session_state.history:
-        st.subheader("Deine Such-Historie")
-        st.table(pd.DataFrame(st.session_state.history))
-    else:
-        st.info("Noch keine Daten gespeichert.")
+    st.write("Hier landen deine Ergebnisse, sobald die KI antwortet.")
 
 with tab3:
-    st.subheader("📍 Hotspots")
-    # Einfache Karte von Málaga
-    view = pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=10)
     st.pydeck_chart(pdk.Deck(
-        initial_view_state=view,
+        initial_view_state=pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=10),
         layers=[pdk.Layer('ScatterplotLayer', data=pd.DataFrame({'lat':[36.72], 'lon':[-4.42]}), get_position='[lon, lat]', get_radius=1000, get_color='[200, 30, 0]')]
     ))
