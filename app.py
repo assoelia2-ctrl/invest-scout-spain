@@ -2,25 +2,20 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# 1. KONFIGURATION
+# 1. KONFIGURATION & KEY-CHECK
 st.set_page_config(page_title="Málaga Invest Pro AI", layout="wide")
-
-# Zugriff auf deinen GROQ_API_KEY aus den Secrets
 groq_key = st.secrets.get("GROQ_API_KEY")
 
 @st.cache_data(ttl=3600)
 def call_groq_agent(prompt):
-    """Nutzt deinen Groq-Key für extrem schnelle Antworten ohne Fehler 400."""
+    """KI-Analyse über Groq (vermeidet Fehler 400 & 429)."""
     if not groq_key:
         return "❌ GROQ_API_KEY fehlt in den Secrets!"
     
     url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {groq_key}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
     payload = {
-        "model": "llama-3.3-70b-versatile", # Ein sehr leistungsstarkes Modell
+        "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}]
     }
     
@@ -28,51 +23,47 @@ def call_groq_agent(prompt):
         response = requests.post(url, json=payload, headers=headers, timeout=20)
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content']
-        elif response.status_code == 429:
-            return "🕒 Groq-Limit erreicht. Bitte 30 Sek. warten."
-        else:
-            return f"❌ Fehler {response.status_code}: {response.text}"
-    except Exception as e:
-        return f"📡 Verbindungsproblem: {e}"
+        return f"❌ Fehler {response.status_code}: Bitte kurz warten."
+    except:
+        return "📡 Verbindung zum Agenten unterbrochen."
 
-# 2. RECHNER-LOGIK
-def calculate_costs(price):
-    itp = price * 0.07
-    notar = price * 0.01
-    total = price + itp + notar
-    return {"Kaufpreis": price, "ITP (7%)": itp, "Notar/Register": notar, "Gesamt-Invest": total}
+def get_real_market_links(query, budget):
+    """Erzeugt echte, funktionierende Links zu den Portalen."""
+    # Basis-Links für die Provinz Málaga
+    idealista = f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}"
+    fotocasa = f"https://www.fotocasa.es/es/comprar/viviendas/malaga-provincia/todas-las-zonas/l?maxPrice={budget}"
+    return idealista, fotocasa
 
-# 3. BENUTZEROBERFLÄCHE
-st.title("🤖 Málaga Investment-Zentrale (Groq Edition)")
-st.success("Status: Verbunden mit Groq Cloud")
+# 2. BENUTZEROBERFLÄCHE (UI)
+st.title("🤖 Málaga Investment-Zentrale")
+st.success("Status: Groq-Agent aktiv & Live-Links bereit")
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("🔍 Analyse & Suche")
-    user_input = st.text_input("Link oder Suchanfrage (z.B. Finca Málaga 250k):")
+    st.subheader("🔍 Suche & Strategie")
+    user_input = st.text_input("Was suchst du? (z.B. Finca in Antequera)", value="Finca mit Garten in Málaga Umland")
+    max_price = st.number_input("Max. Budget (€)", value=250000, step=5000)
     
-    if st.button("🚀 Agent beauftragen"):
-        if user_input:
-            with st.spinner("Groq-Agent analysiert..."):
-                prompt = f"""
-                Analysiere für Málaga Invest: {user_input}.
-                1. Falls Link: Checke m2-Preis & Lage.
-                2. Falls Suche: Liste 3 Angebote mit Links.
-                3. Prognose: 5-Jahres-Wertsteigerung für das Viertel.
-                """
-                antwort = call_groq_agent(prompt)
-                st.markdown(antwort)
-
-with col2:
-    st.subheader("📊 Kosten-Check")
-    price_eval = st.number_input("Kaufpreis (€)", value=250000, step=10000)
-    costs = calculate_costs(price_eval)
-    st.table(pd.DataFrame([costs]).T.rename(columns={0: "Betrag (€)"}))
-    
-    # 5-Jahres-Trend Grafik
-    prognose_data = pd.DataFrame({
-        "Viertel": ["Centro", "Teatinos", "El Palo", "Axarquía"],
-        "Trend %": [15, 22, 12, 18]
-    })
-    st.bar_chart(prognose_data.set_index("Viertel"))
+    if st.button("🚀 Agenten-Analyse starten", use_container_width=True):
+        with st.spinner("Agent wertet Marktdaten aus..."):
+            # Der Agent liefert die strategische Beratung
+            prompt = f"""
+            Analysiere als Immobilien-Experte: {user_input} mit Budget {max_price}€. 
+            Nenne 3 lukrative Gebiete in der Provinz Málaga für dieses Budget.
+            Gib eine Einschätzung zur Wertsteigerung (Capital Growth) ab.
+            Antworte kurz und präzise. Erfinde KEINE Immobilien-Links.
+            """
+            antwort = call_groq_agent(prompt)
+            st.markdown("### 🤖 Strategische Analyse:")
+            st.write(antwort)
+            
+            # Hier generieren wir die ECHTEN Links zu den Portalen
+            id_link, fc_link = get_real_market_links(user_input, max_price)
+            
+            st.divider()
+            st.subheader("🏠 Echte Live-Angebote öffnen:")
+            st.info("Klicke auf die Buttons, um die aktuellen Inserate auf den Portalen zu sehen.")
+            c1, c2 = st.columns(2)
+            c1.link_button("👉 Idealista (Live-Ergebnisse)", id_link, use_container_width=True)
+            c2.link_button("👉 Fot
