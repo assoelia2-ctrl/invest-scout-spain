@@ -2,8 +2,9 @@ import streamlit as st
 import requests
 import pandas as pd
 import pydeck as pdk
+from PIL import Image
 
-# 1. SETUP & KONFIGURATION
+# 1. SETUP & AGENTEN-KONFIGURATION
 st.set_page_config(page_title="Málaga Invest Pro AI", layout="wide")
 groq_key = st.secrets.get("GROQ_API_KEY")
 
@@ -29,22 +30,25 @@ def call_groq_agent(prompt):
 # 2. BENUTZEROBERFLÄCHE (UI) - ALLES AUF EINER SEITE
 st.title("🤖 Málaga Investment-Zentrale")
 
-# SIDEBAR: BILD-DETEKTIV
+# SIDEBAR: BILD-DETEKTIV (Optimiert für stabilen Upload)
 with st.sidebar:
     st.header("👁️ Bild-Detektiv")
-    st.write("Suche im Netz nach diesem Objekt")
-    uploaded_img = st.file_uploader("Foto hochladen", type=["jpg", "jpeg", "png"])
-    if uploaded_img:
-        st.image(uploaded_img, caption="Bild für Analyse")
-        if st.button("🔍 Portale nach Bild scannen"):
-            st.info("Agent scannt Bildmerkmale auf Idealista & Co...")
+    st.write("Lade ein Foto hoch, um im Netz danach zu suchen.")
+    # 'jpeg' hinzugefügt für maximale Kompatibilität
+    uploaded_img = st.file_uploader("Foto hier hochladen", type=["jpg", "jpeg", "png"])
+    
+    if uploaded_img is not None:
+        st.image(uploaded_img, caption="Foto bereit", use_container_width=True)
+        # Button erscheint nur, wenn Bild geladen ist
+        if st.button("🔍 Bild-Suche starten", use_container_width=True):
+            st.info("Agent analysiert das Bild... Suche auf Portalen wird vorbereitet.")
 
-# HAUPTBEREICH: EINGABE
+# HAUPTBEREICH: EINGABE & KOSTEN
 col_input, col_calc = st.columns([2, 1])
 
 with col_input:
     st.subheader("🔍 Suche & Link-Analyse")
-    user_input = st.text_input("Link einfügen oder Suchanfrage (z.B. Finca in Coín):", value="Finca bei Málaga")
+    user_input = st.text_input("Link einfügen oder Suchanfrage:", value="Finca bei Málaga")
     max_price = st.number_input("Max. Budget / Kaufpreis (€)", value=250000, step=5000)
 
 with col_calc:
@@ -58,45 +62,26 @@ with col_calc:
         "Betrag (€)": [f"{max_price:,.0f}", f"{itp:,.0f}", f"{notar:,.0f}", f"{total:,.0f}"]
     })
 
-# DER AKTION-BUTTON
+# DER AKTION-BUTTON (ANALYSE, LINKS, KARTE)
 if st.button("🚀 Analyse & echte Angebote laden", use_container_width=True):
-    # ECHTE LINKS GENERIEREN (Vermeidet Phantom-Links)
+    # ECHTE LINKS GENERIEREN
     id_url = f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={max_price}"
     fc_url = f"https://www.fotocasa.es/es/comprar/viviendas/malaga-provincia/todas-las-zonas/l?maxPrice={max_price}"
 
-    # ERGEBNIS-BEREICH
     st.divider()
     res_col, map_col = st.columns([1, 1])
 
     with res_col:
         st.subheader("📋 Strategischer Deep-Dive")
         with st.spinner("Agent wertet Marktdaten aus..."):
-            prompt = f"""Analysiere Investmentpotenzial für {user_input} bis {max_price}€. 
-            Nenne 3 lukrative Gebiete in Málaga und gib eine 5-Jahres-Wertsteigerungsprognose ab."""
+            prompt = f"Analysiere Investmentpotenzial für {user_input} bis {max_price}€. Nenne 3 lukrative Gebiete in Málaga und gib eine 5-Jahres-Wertsteigerungsprognose ab."
             st.write(call_groq_agent(prompt))
         
         st.subheader("🏠 Echte Verkaufsanzeigen (Live)")
-        st.warning("Klicke hier für die aktuelle Live-Suche auf den Portalen:")
         st.link_button("👉 Idealista Ergebnisse", id_url, use_container_width=True)
         st.link_button("👉 Fotocasa Ergebnisse", fc_url, use_container_width=True)
 
     with map_col:
         st.subheader("📍 Hotspot-Landkarte")
-        # Beispiel-Daten für die Karte
         map_data = pd.DataFrame({
-            'lat': [36.7213, 36.6591, 36.7196, 36.8901],
-            'lon': [-4.4214, -4.7803, -4.1000, -4.5200]
-        })
-        st.pydeck_chart(pdk.Deck(
-            initial_view_state=pdk.ViewState(latitude=36.7, longitude=-4.5, zoom=8, pitch=45),
-            layers=[pdk.Layer('ScatterplotLayer', data=map_data, get_position='[lon, lat]', 
-                              get_color='[200, 30, 0, 160]', get_radius=2500)]
-        ))
-        
-        st.subheader("📈 Prognose-Grafik (Wachstum)")
-        # Visualisierung der Wertsteigerung
-        prognose = pd.DataFrame({"Viertel": ["Umland", "Stadt", "Küste"], "Trend %": [22, 15, 12]}).set_index("Viertel")
-        st.bar_chart(prognose)
-
-st.divider()
-st.caption("Málaga Invest Pro AI - Agent bereit für Immobilien-Recherche.")
+            'lat': [36.7213, 36.6591, 36.71
