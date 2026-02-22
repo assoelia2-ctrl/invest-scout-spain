@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# 1. INITIALISIERUNG
+# 1. KONFIGURATION
 st.set_page_config(page_title="Málaga Invest Pro", layout="wide")
 groq_key = st.secrets.get("GROQ_API_KEY")
 
@@ -16,9 +16,9 @@ def call_ai(prompt):
  try:
   r = requests.post(url, json=payload, headers=headers, timeout=10)
   return r.json()['choices'][0]['message']['content']
- except: return "KI momentan offline."
+ except: return "KI offline."
 
-# 2. SIDEBAR (LINK-FIX OHNE WARTEZEIT)
+# 2. SIDEBAR (LINK-FIX OHNE HÄNGENBLEIBEN)
 with st.sidebar:
  st.header("👁️ Objekt-Detektiv")
  src = st.radio("Quelle:", ["Google-Link", "Handy-Upload"])
@@ -29,7 +29,7 @@ with st.sidebar:
   link = st.text_input("Google-Link hier rein:")
   if link: 
    st.success("✅ Link registriert")
-   st.caption("Google-Vorschau deaktiviert für maximale Stabilität.")
+   st.caption("Vorschau deaktiviert für maximale Stabilität.")
 
  if st.button("🔍 RECHERCHE STARTEN"):
   st.info("Suche in Immobiliendatenbanken aktiv...")
@@ -38,11 +38,11 @@ with st.sidebar:
 st.title("🤖 Málaga Investment-Zentrale")
 c1, c2 = st.columns([2, 1])
 with c1:
- q = st.text_input("Objekt/Ort:", value="Finca Málaga")
+ q = st.text_input("Suchobjekt/Ort:", value="Finca Málaga")
  p = st.number_input("Budget (€):", value=250000)
 with c2:
- st.subheader("📊 Fixkosten")
- itp = p * 0.07 # Reale 7% ITP Steuer Andalusien
+ st.subheader("📊 Fixkosten (Andalusien)")
+ itp = p * 0.07 # Reale 7% ITP Steuer
  st.write(f"Steuer (7%): **{itp:,.0f} €**")
  st.write(f"Gesamtbetrag: **{p+itp:,.0f} €**")
 
@@ -54,7 +54,7 @@ if st.button("🚀 ANALYSE STARTEN", use_container_width=True):
   st.subheader("📋 Strategische Bewertung")
   with st.spinner("KI wertet aus..."):
    st.write(call_ai(f"Check Investment {q} für {p} Euro."))
-  st.subheader("🏠 Live-Links")
+  st.subheader("🏠 Live-Angebote")
   st.link_button("👉 Idealista", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={p}")
   st.link_button("👉 Fotocasa", f"https://www.fotocasa.es/es/comprar/viviendas/malaga-provincia/l?maxPrice={p}")
  with r:
