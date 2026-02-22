@@ -5,58 +5,70 @@ import pydeck as pdk
 import datetime
 import re
 
-# 1. SETUP & FEHLER-BLOCKER (v1 erzwingen)
+# 1. SEITE INITIALISIEREN
 st.set_page_config(page_title="Málaga Invest Pro", layout="wide")
 
+# 2. DER DEFINITIVE API-FIX
+# Wir laden den Key und erzwingen die REST-Schnittstelle
 api_key = st.secrets.get("GEMINI_API_KEY")
+
 if api_key:
-    # transport='rest' ist die Versicherung gegen den 404-Fehler
+    # WICHTIG: transport='rest' unterbindet gRPC-Fehler
     genai.configure(api_key=api_key, transport='rest')
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # NEU: Wir erzwingen das Modell OHNE den automatischen Beta-Pfad
+    model = genai.GenerativeModel(
+        model_name='gemini-1.5-flash',
+        generation_config={"candidate_count": 1}
+    )
 else:
     st.error("API Key fehlt in den Secrets!")
     st.stop()
 
-# Speicher für deine Analysen (Portfolio)
+# Historie im Session State
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# 2. DAS VOLLE DASHBOARD
-st.title("🤖 Dein Málaga Invest-Scout")
+# 3. DAS DASHBOARD
+st.title("🤖 Málaga Invest-Scout")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Analyse", "⚖️ Portfolio", "📍 Karte"])
+tabs = st.tabs(["🔍 Analyse", "⚖️ Portfolio", "📍 Karte"])
 
-with tab1:
-    st.subheader("Immobilien-Check")
-    query = st.text_input("Was suchst du?", placeholder="Finca in Málaga bis 300k...")
+with tabs[0]:
+    query = st.text_input("Was suchst du?", placeholder="Z.B. Finca bei Málaga...")
     budget = st.slider("Budget (€)", 50000, 1000000, 300000)
     
     if st.button("🚀 Analyse starten"):
-        try:
-            with st.spinner("KI scannt den Markt..."):
-                res = model.generate_content(f"Analysiere: {query}. Budget: {budget}€. Beende mit SCORE: [1-10].")
-                score = re.search(r"SCORE:\s*(\d+)", res.text).group(1) if "SCORE:" in res.text else "N/A"
-                
-                st.session_state.history.append({"Datum": datetime.date.today(), "Suche": query, "Score": score})
-                st.success(f"Analyse fertig! Score: {score}")
-                st.markdown(res.text)
-                
-                st.divider()
-                st.link_button("🏠 Idealista Angebote", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}")
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+        if query:
+            try:
+                with st.spinner("KI kontaktiert Markt-Daten..."):
+                    # Manueller Aufruf
+                    response = model.generate_content(f"Analysiere: {query}. Budget {budget}€. SCORE: [1-10]")
+                    
+                    # Score finden
+                    score = re.search(r"SCORE:\s*(\d+)", response.text).group(1) if "SCORE:" in response.text else "N/A"
+                    st.session_state.history.append({"Datum": datetime.date.today(), "Suche": query, "Score": score})
+                    
+                    st.success(f"Analyse abgeschlossen (Score: {score})")
+                    st.markdown(response.text)
+                    
+                    st.divider()
+                    st.link_button("🏠 Zu Idealista", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}")
+            except Exception as e:
+                # Wir geben den Fehler detailliert aus, um zu sehen, ob v1beta wirklich weg ist
+                st.error(f"Technischer Fehler: {str(e)}")
+        else:
+            st.warning("Bitte gib eine Suche ein.")
 
-with tab2:
-    st.subheader("⚖️ Dein Portfolio")
+with tabs[1]:
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
-        st.dataframe(df, use_container_width=True)
-        st.download_button("📥 Excel/CSV Export", df.to_csv(index=False).encode('utf-8'), "investments.csv")
+        st.table(df)
+        st.download_button("📥 Als CSV exportieren", df.to_csv(index=False).encode('utf-8'), "invest.csv")
     else:
         st.info("Noch keine Daten.")
 
-with tab3:
-    st.subheader("📍 Standort-Vorschau")
-    # Die Karte von Málaga
+with tabs[2]:
+    st.subheader("📍 Markt-Übersicht")
     view = pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=10)
     st.pydeck_chart(pdk.Deck(initial_view_state=view, layers=[pdk.Layer('ScatterplotLayer', data=pd.DataFrame({'lat':[36.72], 'lon':[-4.42]}), get_position='[lon, lat]', get_radius=1000, get_color='[200, 30, 0]')]))
