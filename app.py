@@ -1,100 +1,91 @@
 import streamlit as st
 import requests
 import pandas as pd
-import webbrowser
 
-# 1. KONFIGURATION
+# 1. SETUP
 st.set_page_config(page_title="Málaga Invest Ultimate", layout="centered")
 groq_key = st.secrets.get("GROQ_API_KEY")
 
-# 2. EINGABE-BEREICH
+# 2. HAUPT-INTERFACE
 st.title("🤖 Málaga Invest-Zentrale")
-st.markdown("### 🔍 Objekt-Details & Recherche")
+st.markdown("### 🔍 Objekt-Details & Analyse")
 
+# Eingabefelder für Basisdaten und Links
 col_a, col_b = st.columns([2, 1])
 with col_a:
     objekt = st.text_input("Haus-Typ/Region (z.B. Finca Coín):", value="Finca Málaga")
-    g_link = st.text_input("Google Maps/Foto Link des Objekts:")
+    anzeigen_link = st.text_input("🔗 Link zur Immobilien-Anzeige (Idealista, etc.):")
+    g_link = st.text_input("🖼️ Google-Foto Link des Objekts:")
 with col_b:
     preis = st.number_input("Kaufpreis (€):", value=250000, step=5000)
 
-# 7% ITP Steuer-Check (Andalusien Standard)
+# 7% ITP Steuerberechnung (Andalusien)
 itp = preis * 0.07
 gesamt = preis + itp
-
 st.success(f"💰 **Kosten-Struktur:** ITP (7%): {itp:,.0f} € | Gesamt-Invest: {gesamt:,.0f} €")
 
-# 3. INTERAKTIVE RECHERCHE-TOOLS
+# 3. RECHERCHE-TOOLS
 st.subheader("🌐 Markt-Recherche & Bild-Check")
-c1, c2, c3 = st.columns(3)
-
+c1, c2 = st.columns(2)
 with c1:
-    # Sucht direkt nach ähnlichen Fincas im Preisrahmen
-    st.link_button("🏠 Passende Angebote", 
+    st.link_button("🏠 Ähnliche Angebote suchen", 
                    f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/fincas/?precio-maximo={preis + 20000}")
 with c2:
-    # Google Rückwärtssuche Trick: Sucht nach dem Objekt-Kontext im Markt
     search_query = f"{objekt} Málaga kaufen {preis} Euro"
-    st.link_button("🖼️ Foto-Marktcheck", 
+    st.link_button("📸 Foto-Marktcheck starten", 
                    f"https://www.google.com/search?q={search_query.replace(' ', '+')}+site:idealista.com+OR+site:fotocasa.es")
-with c3:
-    st.link_button("📍 Nachbarschaft", f"https://www.google.com/maps/search/{objekt}+Malaga")
 
-# 4. DIE "ALLES-DRIN" ANALYSE (KI, KARTE, TRENDS)
+# 4. DIE VOLLE ANALYSE (KI, KARTE, TRENDS)
 st.divider()
 if st.button("🚀 VOLLSTÄNDIGE ANALYSE STARTEN", use_container_width=True):
     
-    # A. KI-EXPERTE (Inklusive Foto-Link-Analyse)
+    # A. KI-ANALYSE (Inkl. Anzeigen-Check)
     st.subheader("📋 Strategische Bewertung")
     if groq_key:
-        with st.spinner("KI scannt Marktdaten und Objekt-Kontext..."):
+        with st.spinner("KI prüft Anzeige und Marktdaten..."):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {groq_key}"}
             
-            # Die KI prüft nun auch, ob der Link auf ein bekanntes Markt-Objekt hindeutet
             prompt = f"""
-            Analysiere als Immobilien-Experte für Málaga:
-            Objekt: {objekt}
-            Preis: {preis} Euro
-            Referenz-Link: {g_link}
+            Analysiere als Immobilien-Experte für Málaga dieses Angebot:
+            - Objekt: {objekt}
+            - Preis: {preis} Euro
+            - Anzeigen-Link: {anzeigen_link}
+            - Foto-Referenz: {g_link}
             
-            Fragen:
-            1. Ist der Preis für diese Region realistisch?
-            2. Welche Rendite ist bei {objekt} zu erwarten?
-            3. Analyse des Links: Welche Lagevorteile/Nachteile siehst du?
-            4. Markt-Check: Ist dieses Objekt aktuell typisch für den Markt?
+            Aufgaben:
+            1. Prüfe den Preis pro m² (wenn aus Link ersichtlich) im Vergleich zum Marktdurchschnitt.
+            2. Analysiere das Potenzial der Lage (Málaga Region).
+            3. Gib eine Einschätzung zur Rentabilität (Miete vs. Kaufpreis).
+            4. Identifiziere mögliche 'Red Flags' oder Chancen in der Anzeige.
             """
             
             payload = {
                 "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": "Du bist ein spezialisierter Immobilien-Analyst für die Provinz Málaga."},
-                    {"role": "user", "content": prompt}
-                ]
+                "messages": [{"role": "system", "content": "Du bist ein Immobilien-Analyst für Málaga."},
+                             {"role": "user", "content": prompt}]
             }
             try:
                 r = requests.post(url, json=payload, headers=headers, timeout=15)
                 st.write(r.json()['choices'][0]['message']['content'])
             except:
-                st.error("KI-Service temporär überlastet. Der Markt-Check ist aber oben via Button verfügbar.")
+                st.error("KI-Analyse verzögert. Bitte Daten manuell mit den Links oben prüfen.")
 
-    # B. STANDORT-KARTE (Punkte in Málaga/Costa del Sol)
+    # B. STANDORT-KARTE
     st.subheader("📍 Regionaler Fokus")
-    # Fokus auf Málaga Stadt, Coín und Antequera (beliebte Finca-Gebiete)
     map_data = pd.DataFrame({
-        'lat': [36.7212, 36.6591, 37.0194, 36.5417],
-        'lon': [-4.4214, -4.7562, -4.5597, -4.8833],
-        'name': ['Málaga', 'Coín', 'Antequera', 'Marbella']
+        'lat': [36.7212, 36.6591, 37.0194],
+        'lon': [-4.4214, -4.7562, -4.5597]
     })
     st.map(map_data)
 
-    # C. MARKT-TRENDS (VISUALISIERUNG)
-    st.subheader("📈 Wertzuwachs-Prognose (5 Jahre)")
+    # C. MARKT-TRENDS
+    st.subheader("📈 Wertzuwachs-Prognose")
     chart_data = pd.DataFrame({
-        "Sektor": ["Fincas (Umland)", "Stadt-Apartments", "Küsten-Villen", "Renovierungsobjekte"],
-        "Erwarteter Zuwachs %": [22, 15, 12, 28]
+        "Sektor": ["Fincas", "Stadt", "Küste"],
+        "Trend %": [22, 15, 12]
     }).set_index("Sektor")
     st.bar_chart(chart_data)
 
 st.divider()
-st.caption("✅ System-Status: ITP 7% aktiv | Foto-Recherche bereit | KI-Fakten-Check live")
+st.caption("✅ Alles aktiv: 7% ITP | Anzeigen-Analyse | Foto-Check | KI | Karte | Trends")
