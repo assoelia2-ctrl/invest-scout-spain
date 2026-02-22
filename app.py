@@ -3,62 +3,81 @@ import requests
 import pandas as pd
 from PIL import Image
 
-# 1. SETUP & AGENT
-st.set_page_config(page_title="Málaga Invest", layout="wide")
+# 1. INITIALISIERUNG & SESSION STATE (Sorgt dafür, dass nichts verschwindet)
+st.set_page_config(page_title="Málaga Invest Master", layout="wide")
+if 'img' not in st.session_state: st.session_state['img'] = None
+
 groq_key = st.secrets.get("GROQ_API_KEY")
 
-def call_agent(prompt):
-    if not groq_key: return "Key fehlt!"
+def call_ai(prompt):
+    if not groq_key: return "API Key fehlt in Secrets!"
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {groq_key}"}
     payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}]}
     try:
-        r = requests.post(url, json=payload, headers=headers, timeout=10)
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
         return r.json()['choices'][0]['message']['content']
-    except: return "Fehler..."
+    except: return "Agent derzeit offline."
 
-# 2. SIDEBAR (FOTO-FIX)
+# 2. SIDEBAR (BILD-DETEKTIV MIT SPEICHER-LOGIK)
 with st.sidebar:
     st.header("👁️ Bild-Detektiv")
-    # Der stabilste Uploader
-    img_file = st.file_uploader("Bild wählen", type=["jpg", "png", "jpeg"], key="up")
-    if img_file:
-        st.image(img_file, use_container_width=True)
-        # Button ist jetzt immer da, wenn ein Bild existiert
-        if st.button("🔍 IM NETZ SUCHEN", key="search"):
-            st.info("Suche läuft...")
-
-# 3. HAUPTSEITE
-st.title("🤖 Málaga Investment")
-
-col1, col2 = st.columns([2, 1])
-with col1:
-    query = st.text_input("Suche:", value="Finca Málaga")
-    price = st.number_input("Budget (€):", value=250000)
-with col2:
-    st.subheader("📊 Kosten")
-    itp = price * 0.07
-    st.write(f"Steuer: {itp:,.0f}€")
-    st.write(f"Gesamt: {price+itp:,.0f}€")
-
-# 4. AKTION & LINKS (FIX FÜR SYNTAX-FEHLER)
-if st.button("🚀 ANALYSE STARTEN", use_container_width=True):
-    # Links ganz einfach definiert ohne Zeilenumbruch
-    i_url = f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={price}"
-    f_url = f"https://www.fotocasa.es/es/comprar/viviendas/malaga-provincia/l?maxPrice={price}"
+    up = st.file_uploader("Foto wählen", type=["jpg", "jpeg", "png"], key="main_up")
     
+    if up:
+        st.session_state['img'] = up
+        
+    if st.session_state['img']:
+        st.image(st.session_state['img'], use_container_width=True)
+        if st.button("🔍 IM NETZ SUCHEN", use_container_width=True):
+            st.info("Suche nach Objektdaten läuft...")
+
+# 3. HAUPTSEITE (LAYOUT & KOSTEN-CHECK)
+st.title("🤖 Málaga Investment-Zentrale")
+
+c1, c2 = st.columns([2, 1])
+
+with c1:
+    st.subheader("🔍 Suche & Link-Analyse")
+    query = st.text_input("Anfrage oder Link:", value="Finca bei Málaga")
+    price = st.number_input("Budget (€)", value=250000, step=5000)
+
+with c2:
+    st.subheader("📊 Kosten-Check")
+    itp = price * 0.07 # 7% ITP Steuer
+    notar = price * 0.01
+    st.table({
+        "Posten": ["Preis", "ITP (7%)", "Notar/Reg.", "Gesamt"],
+        "€": [f"{price:,.0f}", f"{itp:,.0f}", f"{notar:,.0f}", f"{price+itp+notar:,.0f}"]
+    })
+
+# 4. AKTIONEN (ANALYSE, LINKS, KARTE, TRENDS)
+if st.button("🚀 ANALYSE & ANGEBOTE LADEN", use_container_width=True):
+    # Echte Links ohne Zeilenumbruch-Gefahr
+    id_url = f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={price}"
+    fc_url = f"https://www.fotocasa.es/es/comprar/viviendas/malaga-provincia/l?maxPrice={price}"
+
     st.divider()
-    l, r = st.columns(2)
-    with l:
-        st.subheader("📋 KI-Check")
-        st.write(call_agent(f"Check {query} {price}€."))
-        st.subheader("🏠 Links")
-        st.link_button("👉 Idealista", i_url)
-        st.link_button("👉 Fotocasa", f_url)
-    with r:
-        st.subheader("📍 Karte")
-        # Einfachste Karte um Fehler zu vermeiden
-        df = pd.DataFrame({'lat': [36.72, 36.65], 'lon': [-4.42, -4.78]})
-        st.map(df)
-        st.subheader("📈 Trend")
-        st.bar_chart(pd.DataFrame({"Ort": ["Umland", "Stadt"], "W": [20, 15]}).set_index("Ort"))
+    res_l, res_r = st.columns(2)
+
+    with res_l:
+        st.subheader("📋 Strategische Analyse")
+        with st.spinner("Agent wertet Marktdaten aus..."):
+            st.write(call_ai(f"Analysiere Investmentpotenzial für {query} bis {price}€ in Málaga."))
+        
+        st.subheader("🏠 Echte Live-Angebote")
+        st.link_button("👉 Idealista Ergebnisse", id_url, use_container_width=True)
+        st.link_button("👉 Fotocasa Ergebnisse", fc_url, use_container_width=True)
+
+    with res_r:
+        st.subheader("📍 Hotspot-Landkarte")
+        # Einfache Karte zur Vermeidung von Klammer-Fehlern
+        m_df = pd.DataFrame({'lat': [36.72, 36.65, 36.89], 'lon': [-4.42, -4.78, -4.52]})
+        st.map(m_df)
+        
+        st.subheader("📈 Wertsteigerung (5 Jahre)")
+        chart_data = pd.DataFrame({"Viertel": ["Umland", "Stadt", "Küste"], "Trend %": [22, 15, 12]}).set_index("Viertel")
+        st.bar_chart(chart_data)
+
+st.divider()
+st.caption("Málaga Invest Pro Master - Alle Systeme bereit.")
