@@ -2,35 +2,35 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# 1. SETUP
+# 1. SETUP & KONFIGURATION
 st.set_page_config(page_title="Málaga Invest Ultimate", layout="centered")
 groq_key = st.secrets.get("GROQ_API_KEY")
 
-# 2. HAUPT-INTERFACE
+# 2. HAUPT-INTERFACE (Kompakte Eingabe)
 st.title("🤖 Málaga Invest-Zentrale")
 st.markdown("### 🔍 Objekt-Details & Analyse")
 
-# Eingabefelder für Basisdaten und Links
-col_a, col_b = st.columns([2, 1])
-with col_a:
-    objekt = st.text_input("Haus-Typ/Region (z.B. Finca Coín):", value="Finca Málaga")
+# Layout-Anpassung: Links und Objektdaten in einer Sektion
+c1, c2 = st.columns([2, 1])
+with c1:
     anzeigen_link = st.text_input("🔗 Link zur Immobilien-Anzeige (Idealista, etc.):")
     g_link = st.text_input("🖼️ Google-Foto Link des Objekts:")
-with col_b:
-    preis = st.number_input("Kaufpreis (€):", value=250000, step=5000)
+with c2:
+    objekt = st.text_input("Haus-Typ/Region:", value="Finca Málaga")
+    preis = st.number_input("Preis (€):", value=250000, step=5000)
 
-# 7% ITP Steuerberechnung (Andalusien)
+# 7% ITP Steuerberechnung (Fixer Bestandteil aus Andalusien-Fakten)
 itp = preis * 0.07
 gesamt = preis + itp
 st.success(f"💰 **Kosten-Struktur:** ITP (7%): {itp:,.0f} € | Gesamt-Invest: {gesamt:,.0f} €")
 
-# 3. RECHERCHE-TOOLS
+# 3. RECHERCHE-TOOLS (Sofort-Links)
 st.subheader("🌐 Markt-Recherche & Bild-Check")
-c1, c2 = st.columns(2)
-with c1:
+tool_l, tool_r = st.columns(2)
+with tool_l:
     st.link_button("🏠 Ähnliche Angebote suchen", 
                    f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/fincas/?precio-maximo={preis + 20000}")
-with c2:
+with tool_r:
     search_query = f"{objekt} Málaga kaufen {preis} Euro"
     st.link_button("📸 Foto-Marktcheck starten", 
                    f"https://www.google.com/search?q={search_query.replace(' ', '+')}+site:idealista.com+OR+site:fotocasa.es")
@@ -39,39 +39,25 @@ with c2:
 st.divider()
 if st.button("🚀 VOLLSTÄNDIGE ANALYSE STARTEN", use_container_width=True):
     
-    # A. KI-ANALYSE (Inkl. Anzeigen-Check)
+    # A. KI-EXPERTE (Auswertung der Links und Daten)
     st.subheader("📋 Strategische Bewertung")
     if groq_key:
         with st.spinner("KI prüft Anzeige und Marktdaten..."):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {groq_key}"}
-            
-            prompt = f"""
-            Analysiere als Immobilien-Experte für Málaga dieses Angebot:
-            - Objekt: {objekt}
-            - Preis: {preis} Euro
-            - Anzeigen-Link: {anzeigen_link}
-            - Foto-Referenz: {g_link}
-            
-            Aufgaben:
-            1. Prüfe den Preis pro m² (wenn aus Link ersichtlich) im Vergleich zum Marktdurchschnitt.
-            2. Analysiere das Potenzial der Lage (Málaga Region).
-            3. Gib eine Einschätzung zur Rentabilität (Miete vs. Kaufpreis).
-            4. Identifiziere mögliche 'Red Flags' oder Chancen in der Anzeige.
-            """
-            
+            prompt = f"Analyse für {objekt} ({preis}€). Anzeige: {anzeigen_link}. Foto-Link: {g_link}. Fokus: Málaga Markt."
             payload = {
                 "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "system", "content": "Du bist ein Immobilien-Analyst für Málaga."},
+                "messages": [{"role": "system", "content": "Du bist ein Immobilien-Experte für Málaga."},
                              {"role": "user", "content": prompt}]
             }
             try:
                 r = requests.post(url, json=payload, headers=headers, timeout=15)
                 st.write(r.json()['choices'][0]['message']['content'])
             except:
-                st.error("KI-Analyse verzögert. Bitte Daten manuell mit den Links oben prüfen.")
+                st.error("KI-Dienst verzögert. Bitte Daten manuell prüfen.")
 
-    # B. STANDORT-KARTE
+    # B. STANDORT-KARTE (Punkte in der Provinz Málaga)
     st.subheader("📍 Regionaler Fokus")
     map_data = pd.DataFrame({
         'lat': [36.7212, 36.6591, 37.0194],
@@ -79,7 +65,7 @@ if st.button("🚀 VOLLSTÄNDIGE ANALYSE STARTEN", use_container_width=True):
     })
     st.map(map_data)
 
-    # C. MARKT-TRENDS
+    # C. MARKT-TRENDS (Grafische Prognose)
     st.subheader("📈 Wertzuwachs-Prognose")
     chart_data = pd.DataFrame({
         "Sektor": ["Fincas", "Stadt", "Küste"],
@@ -88,4 +74,4 @@ if st.button("🚀 VOLLSTÄNDIGE ANALYSE STARTEN", use_container_width=True):
     st.bar_chart(chart_data)
 
 st.divider()
-st.caption("✅ Alles aktiv: 7% ITP | Anzeigen-Analyse | Foto-Check | KI | Karte | Trends")
+st.caption("✅ System-Status: ITP 7% aktiv | Anzeigen-Analyse bereit | KI & Markt-Daten live")
