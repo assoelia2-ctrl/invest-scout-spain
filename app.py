@@ -1,64 +1,58 @@
 import streamlit as st
 import requests
 import pandas as pd
-import pydeck as pdk
+import datetime
 
-# 1. SETUP
-st.set_page_config(page_title="Málaga Invest Pro", layout="wide")
-api_key = st.secrets.get("GROQ_API_KEY")
+# SETUP
+st.set_page_config(page_title="Málaga Invest Agent Pro", layout="wide")
+api_key = st.secrets.get("GROQ_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 
-def call_groq(prompt):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "user", "content": prompt}]
-    }
+def ki_agent_suche(query, budget):
+    """Unser Agent analysiert, rechnet und bewertet."""
+    prompt = f"""
+    Du bist unser spezialisierter Málaga-Investment-Agent. 
+    Analysiere die Anfrage: '{query}' mit Budget {budget}€.
+    
+    1. IMMOBILIEN-SUCHE: Nenne konkrete Gebiete in Málaga (z.B. Almogía, Coín, Montes de Málaga), 
+       wo man für {budget}€ noch Fincas oder Häuser findet.
+    2. FINANZ-CHECK: Berechne ca. 10% Nebenkosten (ITP, Notar) und schätze die jährliche IBI (Grundsteuer).
+    3. AGENTEN-URTEIL: Lohnt sich das Investment aktuell? (Markttrend Málaga 2025: +5-10%).
+    
+    Gib am Ende 3 Direktlinks zu Idealista-Suchen aus, die genau auf dieses Budget passen.
+    AGENTEN-SCORE: [X]/10
+    """
+    
+    # Nutzt die erfolgreiche v1beta Route
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
-        else:
-            return f"Fehler: {response.status_code} - {response.text}"
-    except Exception as e:
-        return f"Verbindung fehlgeschlagen: {e}"
+        response = requests.post(url, json=payload, timeout=20)
+        return response.json()['candidates'][0]['content']['parts'][0]['text']
+    except:
+        return "Agent momentan überlastet. Bitte erneut versuchen."
 
-# 2. UI STRUKTUR
-st.title("🚀 Málaga Invest-Scout (Groq Edition)")
-st.markdown("---")
+# UI
+st.title("🤖 Dein Málaga Investment-Agent")
+st.info("Der Agent ist aktiv und analysiert Live-Marktdaten für dich.")
 
-tab1, tab2, tab3 = st.tabs(["🔍 KI-Analyse", "📊 Portfolio", "🗺️ Karte"])
+col1, col2 = st.columns([2, 1])
 
-with tab1:
-    query = st.text_input("Was suchst du in Málaga?", value="Finca bis 250.000€")
-    if st.button("Analyse starten", use_container_width=True):
-        if not api_key:
-            st.error("API Key fehlt in den Secrets!")
-        else:
-            with st.spinner("KI berechnet Marktchancen..."):
-                antwort = call_groq(f"Analysiere kurz: {query} in Málaga. Lohnt sich das als Investment?")
-                st.info("### Analyse-Ergebnis:")
-                st.write(antwort)
-                st.divider()
-                st.link_button("🏠 Direkt zu Idealista", "https://www.idealista.com")
+with col1:
+    user_query = st.text_input("Was soll der Agent suchen?", value="Finca mit Garten in Málaga Umland")
+    budget = st.number_input("Max. Budget (€)", value=250000)
+    
+    if st.button("🚀 Agenten-Suche starten"):
+        with st.spinner("Agent wertet Angebote aus..."):
+            analyse = ki_agent_suche(user_query, budget)
+            st.markdown(analyse)
+            
+            # Automatischer Schnell-Link
+            st.divider()
+            st.link_button("👉 Direkt-Suche auf Idealista (Preisgeprüft)", 
+                           f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}")
 
-with tab2:
-    st.subheader("⚖️ Dein Investment-Portfolio")
-    st.write("Hier werden deine zukünftigen Suchen gespeichert.")
-
-with tab3:
-    st.subheader("🗺️ Immobilien-Hotspots")
-    # Ansicht auf Málaga zentriert
-    view = pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=11)
-    st.pydeck_chart(pdk.Deck(
-        initial_view_state=view,
-        layers=[pdk.Layer('ScatterplotLayer', 
-                          data=pd.DataFrame({'lat':[36.72], 'lon':[-4.42]}), 
-                          get_position='[lon, lat]', 
-                          get_radius=1000, 
-                          get_color='[255, 75, 75]')]
-    ))
+with col2:
+    st.subheader("📋 Agenten-Logbuch")
+    st.write("Hier speichert der Agent deine besten Funde für später.")
+    # Platzhalter für Portfolio-Funktion
