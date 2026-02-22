@@ -5,118 +5,71 @@ import pandas as pd
 import pydeck as pdk
 import datetime
 import re
-import io
 
-# 1. SEITE INITIALISIEREN
-st.set_page_config(page_title="Invest-Scout: Málaga Pro", layout="wide", page_icon="🏢")
+# 1. SETUP
+st.set_page_config(page_title="Invest-Scout Málaga", layout="wide")
 
-# 2. DER "HUNDERT PROZENT" FIX (Gegen 404 v1beta)
+# 2. DER DEFINITIVE FIX GEGEN 404 (transport='rest' ist entscheidend)
 api_key = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
 
 if api_key:
-    try:
-        # 'transport=rest' umgeht die fehlerhaften Kanäle aus deinen Screenshots
-        genai.configure(api_key=api_key, transport='rest')
-        # Wir definieren das Modell ohne Beta-Präfix
-        model = genai.GenerativeModel('gemini-1.5-flash')
-    except Exception as e:
-        st.error(f"Verbindungsfehler: {e}")
-        st.stop()
+    # Wir erzwingen die stabile REST-Verbindung
+    genai.configure(api_key=api_key, transport='rest')
+    # Wir nutzen das Modell ohne den fehlerhaften Beta-Pfad
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
-    st.error("API Key fehlt! Bitte in den 'Secrets' der Streamlit Cloud eintragen.")
+    st.error("API Key fehlt in den Streamlit Secrets!")
     st.stop()
 
-# Speicher für das Portfolio
+# Speicher für Portfolio (Historie)
 if 'visit_history' not in st.session_state:
     st.session_state.visit_history = []
 
-# 3. KI-AGENT LOGIK
-def run_expert_ai(query, image=None):
-    instruction = """Du bist Senior-Immobilien-Analyst für Málaga. 
-    Analysiere das Investment präzise.
-    Antworte IMMER am Ende mit diesem exakten Format für die Tabelle:
-    SCORE: [1-10]
-    RENDITE: [%]
-    RISIKO: [Text]
-    MAX-PREIS: [Euro]"""
+# 3. BENUTZEROBERFLÄCHE (Tabs für Ordnung)
+st.title("🤖 Invest-Scout: Málaga Pro")
+
+tab1, tab2 = st.tabs(["🔍 Neue Analyse", "⚖️ Mein Portfolio"])
+
+with tab1:
+    query = st.text_input("Was suchst du?", placeholder="Z.B. Haus in Málaga bis 300.000€")
+    budget = st.number_input("Budget (€)", value=300000, step=10000)
     
-    try:
-        content = [instruction, query]
-        if image:
-            content.append(image)
-        
-        response = model.generate_content(content)
-        text = response.text
-        
-        # Daten-Extraktion für das Portfolio
-        score = re.search(r"SCORE:\s*(\d+)", text).group(1) if re.search(r"SCORE:\s*(\d+)", text) else "N/A"
-        rendite = re.search(r"RENDITE:\s*([\d,.]+%?)", text).group(1) if re.search(r"RENDITE:\s*([\d,.]+%?)", text) else "N/A"
-        risiko = re.search(r"RISIKO:\s*(\w+)", text).group(1) if re.search(r"RISIKO:\s*(\w+)", text) else "N/A"
-        max_p = re.search(r"MAX-PREIS:\s*(.*)", text).group(1) if re.search(r"MAX-PREIS:\s*(.*)", text) else "N/A"
-        
-        return text, score, rendite, risiko, max_p
-    except Exception as e:
-        return f"Fehler: {e}", "N/A", "N/A", "N/A", "N/A"
+    if st.button("🚀 Markt-Analyse starten", use_container_width=True):
+        if query:
+            try:
+                with st.spinner("Verbindung zur KI wird aufgebaut..."):
+                    # Die Anfrage an die KI
+                    res = model.generate_content(f"Analysiere als Immobilien-Experte: {query}. Budget: {budget}€. Antworte mit Tipps und am Ende mit SCORE: [1-10].")
+                    bericht = res.text
+                    
+                    # Score extrahieren für die Tabelle
+                    score_match = re.search(r"SCORE:\s*(\d+)", bericht)
+                    score = score_match.group(1) if score_match else "N/A"
+                    
+                    # In Historie speichern
+                    st.session_state.visit_history.append({
+                        "Datum": datetime.date.today().strftime("%d.%m.%Y"),
+                        "Anfrage": query[:40] + "...",
+                        "Budget": f"{budget:,} €",
+                        "Score": score
+                    })
+                    
+                    st.success("Analyse erfolgreich!")
+                    st.markdown(bericht)
+            except Exception as e:
+                st.error(f"Fehler: {str(e)}")
+                st.info("Falls der 404-Fehler bleibt, klicke unten rechts auf 'Manage app' -> 'Reboot app'.")
+        else:
+            st.warning("Bitte gib eine Suchanfrage ein.")
 
-# 4. BENUTZEROBERFLÄCHE (UI)
-st.title("🤖 Invest-Scout Pro: Málaga Dashboard")
-
-tabs = st.tabs(["🔍 Markt-Analyse", "⚖️ Mein Portfolio", "📍 Regionen-Karte"])
-
-# --- TAB 1: ANALYSE ---
-with tabs[0]:
-    st.subheader("Neuer Immobilien-Check")
-    search_query = st.text_input("Deine Anfrage", placeholder="Z.B. Wohnung in Málaga Zentrum bis 200k")
-    
-    col_in, col_img = st.columns([2, 1])
-    with col_in:
-        budget = st.slider("Budget (€)", 50000, 2000000, 300000, step=10000)
-    with col_img:
-        uploaded_file = st.file_uploader("Foto hochladen (Optional)", type=["jpg", "png", "jpeg"])
-
-    if st.button("🚀 Analyse starten", use_container_width=True):
-        if search_query:
-            with st.spinner("KI analysiert..."):
-                img = Image.open(uploaded_file) if uploaded_file else None
-                bericht, score, rendite, risiko, max_p = run_expert_ai(f"{search_query} Budget: {budget}€", img)
-                
-                # Portfolio-Speicherung
-                st.session_state.visit_history.append({
-                    "Datum": datetime.date.today().strftime("%d.%m.%Y"),
-                    "Objekt": search_query[:35] + "...",
-                    "Score": score, "Rendite": rendite, "Risiko": risiko, "Empfehlung": max_p
-                })
-                
-                st.success("Analyse abgeschlossen!")
-                st.markdown(bericht)
-                
-                st.divider()
-                st.subheader("🔗 Direkte Links")
-                c1, c2 = st.columns(2)
-                c1.link_button("🏠 Idealista", f"https://www.idealista.com/de/venta-viviendas/malaga-provincia/?precio-maximo={budget}")
-                c2.link_button("🌍 Kyero", f"https://www.kyero.com/de/malaga-provinz-immobilien-kaufen-0l3?max_price={budget}")
-
-# --- TAB 2: PORTFOLIO & EXPORT ---
-with tabs[1]:
+with tab2:
     if st.session_state.visit_history:
-        st.subheader("⚖️ Dein Investment-Portfolio")
+        st.subheader("Deine gespeicherten Analysen")
         df = pd.DataFrame(st.session_state.visit_history)
-        st.dataframe(df, use_container_width=True)
+        st.table(df)
         
-        # EXPORT ALS CSV (Excel-kompatibel)
+        # CSV Export
         csv = df.to_csv(index=False).encode('utf-8')
-        col_dl, col_del = st.columns(2)
-        with col_dl:
-            st.download_button("📥 Als Excel/CSV speichern", data=csv, file_name="Malaga_Portfolio.csv", mime='text/csv')
-        with col_del:
-            if st.button("🗑️ Historie löschen"):
-                st.session_state.visit_history = []
-                st.rerun()
+        st.download_button("📥 Als Excel (CSV) exportieren", data=csv, file_name="Malaga_Investments.csv", mime='text/csv')
     else:
-        st.info("Noch keine Analysen gespeichert.")
-
-# --- TAB 3: KARTE ---
-with tabs[2]:
-    st.subheader("📍 Immobilien-Fokus")
-    view = pdk.ViewState(latitude=36.72, longitude=-4.42, zoom=10)
-    st.pydeck_chart(pdk.Deck(initial_view_state=view))
+        st.info("Noch keine Analysen im Portfolio.")
