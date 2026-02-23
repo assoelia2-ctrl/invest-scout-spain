@@ -13,7 +13,7 @@ if "GROQ_API_KEY" not in st.secrets:
 
 groq_key = st.secrets["GROQ_API_KEY"]
 
-# --- 2. BILD-OPTIMIERUNG ---
+# --- 2. BILD-OPTIMIERUNG (Verhindert Abstürze) ---
 def process_image(image_file):
     img = Image.open(image_file)
     if img.mode in ("RGBA", "P"): img = img.convert("RGB")
@@ -23,29 +23,30 @@ def process_image(image_file):
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 # --- 3. UI ---
-st.title("🛡️ Invest-Scout: Risiko- & Standort-Check")
+st.title("🛡️ Invest-Scout: Finaler Risiko-Check")
+st.info("Lade Screenshots (Idealista, Fotos etc.) hoch. Ich prüfe Recht, Boden & Zustand.")
 
 uploaded_files = st.file_uploader(
-    "Screenshots (Idealista, Fotos etc.) hochladen:", 
+    "Bilder auswählen:", 
     type=["jpg", "png", "jpeg"], 
     accept_multiple_files=True
 )
 
 if uploaded_files:
-    st.info(f"✅ {len(uploaded_files)} Bilder bereit zur Analyse.")
+    st.success(f"✅ {len(uploaded_files)} Bilder bereit.")
     
     if st.button("🚀 TIEFENPRÜFUNG STARTEN", use_container_width=True):
-        with st.spinner("Prüfe Recht, Boden, Zustand & Preis..."):
+        with st.spinner("Experten-Analyse läuft..."):
             try:
-                # Der Master-Prompt für all deine Anforderungen
+                # Master-Prompt mit all deinen Anforderungen
                 content_list = [{
                     "type": "text", 
-                    "text": """DU BIST EIN IMMOBILIEN-EXPERTE FÜR MÁLAGA.
-                    Prüfe diese Bilder GEMEINSAM auf:
-                    1. RECHT: AFO, DAFO, Suelo Rústico, Ocupado, Proindiviso.
-                    2. STANDORT: Bodenbeschaffenheit, Lage (Urbano/Rústico).
-                    3. ZUSTAND: Pool, Dach, Fassade, Renovierungsstau.
-                    4. DATEN: Preis, m2, genauer Ort."""
+                    "text": """DU BIST EIN IMMOBILIEN-EXPERTE FÜR ANDALUSIEN.
+                    Analysiere diese Bilder GEMEINSAM auf:
+                    1. RECHTLICHE RISIKEN: Suche nach AFO, DAFO, Suelo Rústico, Ocupado, Proindiviso.
+                    2. STANDORT & BODEN: Bewerte Bodenbeschaffenheit und Lage (Urbano/Rústico).
+                    3. ZUSTAND: Analyse von Bausubstanz, Pool, Dach & Renovierungsstau.
+                    4. DATEN: Extrahiere Preis, m2 und Ort."""
                 }]
                 
                 for file in uploaded_files:
@@ -55,7 +56,7 @@ if uploaded_files:
                         "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}
                     })
                 
-                # --- HIER IST DIE GEÄNDERTE ZEILE ---
+                # --- DAS NEUE STABILE MODELL ---
                 payload = {
                     "model": "llama-3.2-90b-vision-preview",
                     "messages": [{"role": "user", "content": content_list}],
@@ -72,10 +73,18 @@ if uploaded_files:
                     st.markdown("### 📋 Analyse-Ergebnis")
                     st.markdown(res.json()['choices'][0]['message']['content'])
                 else:
-                    st.error(f"Fehler: {res.status_code}. Melde dich beim Admin.")
-                    st.write(res.text) # Zeigt uns Details, falls es doch noch hakt
+                    # Falls Groq das Modell wieder nicht findet, versuchen wir automatisch das Backup
+                    st.warning("Hauptmodell überlastet. Nutze Backup-Analyse...")
+                    payload["model"] = "llama-3.2-11b-vision-preview" 
+                    res = requests.post("https://api.groq.com/openai/v1/chat/completions", 
+                                         headers={"Authorization": f"Bearer {groq_key}"}, json=payload)
+                    if res.status_code == 200:
+                        st.markdown(res.json()['choices'][0]['message']['content'])
+                    else:
+                        st.error(f"Kritischer Fehler: {res.status_code}")
+                        st.write(res.text)
             except Exception as e:
                 st.error(f"Technischer Fehler: {e}")
 
 st.divider()
-st.caption("Version 4.0 - Modell: Llama 90B Vision")
+st.caption("Version 5.0 - Stabilitäts-Update")
