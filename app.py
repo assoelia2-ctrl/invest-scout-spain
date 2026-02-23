@@ -1,42 +1,30 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
-import pandas as pd
 
-# 1. Seite stabilisieren
-st.set_page_config(page_title="Málaga Invest: Reset", layout="wide")
+# ... dein bisheriger Code ...
 
-# Speicher für den Text fest anlegen
-if 'ergebnis_text' not in st.session_state:
-    st.session_state['ergebnis_text'] = ""
-
-st.title("🛡️ Invest-Scout: Stabiler Modus")
-
-# 2. Upload-Bereich mit festem Key (wichtig für die Stabilität!)
-datei = st.file_uploader("Bild oder Screenshot auswählen:", type=["jpg", "png", "jpeg"], key="uploader_v2")
-
-if datei:
-    img = Image.open(datei)
-    st.image(img, caption="Datei bereit", use_container_width=True)
+if uploaded_file:
+    img = Image.open(uploaded_file)
+    
+    # NEU: FOTO-OPTIMIERUNG (Verhindert Abstürze bei großen Dateien)
+    # Wenn das Bild sehr groß ist, skalieren wir es runter
+    if img.width > 2000 or img.height > 2000:
+        img.thumbnail((1500, 1500))
+    
+    st.image(img, caption="Bild für Analyse bereit", use_container_width=True)
     
     if st.button("🚀 ANALYSE STARTEN"):
-        try:
-            # Direkte Texterkennung
-            ergebnis = pytesseract.image_to_string(img, lang='deu+spa')
-            st.session_state['ergebnis_text'] = ergebnis
-            st.success("Analyse abgeschlossen!")
-        except Exception as e:
-            st.error(f"Fehler: {e}")
-
-# 3. Anzeige der Ergebnisse (Nur wenn Analyse erfolgt ist)
-if st.session_state['ergebnis_text']:
-    st.divider()
-    
-    # Karte zur Übersicht
-    st.map(pd.DataFrame({'lat': [36.7212], 'lon': [-4.4214]}))
-    
-    # Recherche-Link (Sicherer als ein interaktiver Chat)
-    st.markdown("### [🔍 Dubletten-Check bei Google](https://www.google.com/search?q=Málaga+Immobilie+Recherche)")
-    
-    with st.expander("Gelesene Daten anzeigen"):
-        st.write(st.session_state['ergebnis_text'])
+        with st.spinner("KI verarbeitet Foto..."):
+            try:
+                # Vorverarbeitung für Fotos (Kontrast erhöhen, Graustufen)
+                img_proc = ImageOps.grayscale(img)
+                img_proc = ImageEnhance.Contrast(img_proc).enhance(2.0)
+                
+                # Texterkennung mit Fehlerpuffer
+                text = pytesseract.image_to_string(img_proc, lang='deu+spa')
+                st.session_state['ergebnis_text'] = text
+                st.success("Foto erfolgreich ausgelesen!")
+            except Exception as e:
+                st.error(f"Fehler bei Foto-Verarbeitung: {e}")
+                st.info("Tipp: Versuche, das Foto mit weniger Auflösung zu machen.")
