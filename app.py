@@ -2,43 +2,47 @@ import streamlit as st
 from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
 
-# 1. Speicher felsenfest vordefinieren
-st.set_page_config(page_title="Invest-Scout: Profi-Fix", layout="wide")
+# 1. SETUP
+st.set_page_config(page_title="Invest-Scout: Finaler Fix", layout="wide")
 
-if 'text_daten' not in st.session_state:
-    st.session_state['text_daten'] = ""
+# Speicher für Text anlegen, falls er noch nicht da ist
+if 'text' not in st.session_state:
+    st.session_state['text'] = ""
 
-st.title("🛡️ Invest-Scout: Foto-Garantie")
+st.title("🛡️ Invest-Scout: Foto- & Screenshot-Garantie")
 
-# 2. Uploader OHNE Zwischenvariable (verhindert den NameError)
-st.file_uploader("Bild oder Foto hier rein:", type=["jpg", "png", "jpeg"], key="dateiupload")
+# 2. DER UPLOADER (isoliert in einer Variablen)
+datei = st.file_uploader("Bild/Foto hochladen:", type=["jpg", "png", "jpeg"], key="uploader_vfinal")
 
-# 3. Direkter Zugriff auf den Speicherplatz des Uploaders
-if st.session_state.dateiupload is not None:
-    # Bild laden
-    img = Image.open(st.session_state.dateiupload)
-    st.image(img, caption="Datei erfolgreich geladen", use_container_width=True)
-    
-    if st.button("🚀 ANALYSE STARTEN"):
-        with st.spinner("KI liest Dokument..."):
-            try:
-                # 95KB RETTUNG: Bild vergrößern für bessere Lesbarkeit
-                img_big = img.resize((img.width * 3, img.height * 3), Image.Resampling.LANCZOS)
+# 3. DIE "SICHERHEITS-SCHLEUSE"
+# Wir nutzen try/except, damit der NameError die App nicht mehr killen kann
+try:
+    if datei is not None:
+        img = Image.open(datei)
+        st.image(img, caption="Datei erfolgreich erkannt", use_container_width=True)
+        
+        if st.button("🚀 ANALYSE STARTEN"):
+            with st.spinner("KI liest Dokument..."):
+                # Foto-Rettung (Aufpumpen auf 3-fache Größe)
+                w, h = img.size
+                img_big = img.resize((w*3, h*3), Image.Resampling.LANCZOS)
                 
-                # Kontrast optimieren
+                # Vorverarbeitung
                 proc = ImageOps.grayscale(img_big)
                 proc = ImageEnhance.Contrast(proc).enhance(2.5)
                 
-                # Texterkennung
-                text = pytesseract.image_to_string(proc, lang='deu+spa')
-                st.session_state['text_daten'] = text
-                st.success("Analyse fertig!")
-            except Exception as e:
-                st.error(f"Fehler: {e}")
+                # OCR (Texterkennung)
+                st.session_state['text'] = pytesseract.image_to_string(proc, lang='deu+spa')
+                st.success("Analyse abgeschlossen!")
 
-# 4. RECHERCHE-LINK
-if st.session_state['text_daten']:
+except NameError:
+    st.warning("Warte auf Datei-Upload...")
+except Exception as e:
+    st.error(f"Technischer Fehler: {e}")
+
+# 4. ERGEBNISSE & RECHERCHE
+if st.session_state['text']:
     st.divider()
-    st.markdown("### [👉 Dubletten im Internet prüfen](https://www.google.com/search?q=Málaga+Immobilie+Recherche)")
+    st.markdown("### [🔍 Dubletten im Internet prüfen](https://www.google.com/search?q=Málaga+Immobilie+Invest+Check)")
     with st.expander("Gelesene Daten"):
-        st.write(st.session_state['text_daten'])
+        st.write(st.session_state['text'])
