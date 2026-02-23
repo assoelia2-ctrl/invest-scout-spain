@@ -1,56 +1,35 @@
 import streamlit as st
 from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
-import gc
 
-st.set_page_config(page_title="Invest-Scout: Multi-Scan", layout="wide")
+st.set_page_config(page_title="Invest-Scout: Screenshot-Modus", layout="wide")
 
-if 'gesamter_text' not in st.session_state:
-    st.session_state['gesamter_text'] = []
+if 'text' not in st.session_state:
+    st.session_state['text'] = ""
 
-st.title("🛡️ Invest-Scout: Multi-Upload")
+st.title("🛡️ Invest-Scout: Screenshot-Analyse")
 
-# 1. Multi-Uploader aktivieren
-dateien = st.file_uploader("Mehrere Fotos/Screenshots wählen:", 
-                            type=["jpg", "png", "jpeg"], 
-                            accept_multiple_files=True, # WICHTIG
-                            key="multi_v13")
+# Stabiler Uploader für Screenshots
+datei = st.file_uploader("Screenshot hochladen:", type=["jpg", "png", "jpeg"], key="sc_v1")
 
-if dateien:
-    if st.button("🚀 ALLE BILDER ANALYSIEREN"):
-        st.session_state['gesamter_text'] = [] # Reset für neuen Durchlauf
+if datei is not None:
+    try:
+        img = Image.open(datei)
+        st.image(img, caption="Screenshot erkannt", use_container_width=True)
         
-        for i, datei in enumerate(dateien):
-            with st.status(f"Verarbeite Bild {i+1} von {len(dateien)}...") as status:
-                try:
-                    img = Image.open(datei)
-                    
-                    # 95KB Rettung & RAM-Schutz
-                    img_big = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
-                    proc = ImageOps.grayscale(img_big)
-                    proc = ImageEnhance.Contrast(proc).enhance(2.0)
-                    
-                    text = pytesseract.image_to_string(proc, lang='deu+spa')
-                    st.session_state['gesamter_text'].append(f"--- Datei {i+1} ---\n{text}")
-                    
-                    # RAM sofort leeren nach jedem Bild
-                    del img
-                    del img_big
-                    del proc
-                    gc.collect()
-                    status.update(label=f"Bild {i+1} fertig!", state="complete")
-                except Exception as e:
-                    st.error(f"Fehler bei Bild {i+1}: {e}")
+        if st.button("🚀 SCREENSHOT ANALYSIEREN"):
+            # Kontrast für Screenshots optimieren
+            proc = ImageOps.grayscale(img)
+            proc = ImageEnhance.Contrast(proc).enhance(1.5)
+            
+            text = pytesseract.image_to_string(proc, lang='deu+spa')
+            st.session_state['text'] = text
+            st.success("Analyse erfolgreich!")
+    except Exception as e:
+        st.error(f"Fehler: {e}")
 
-# 2. Anzeige der gesammelten Ergebnisse
-if st.session_state['gesamter_text']:
+if st.session_state['text']:
     st.divider()
-    st.success(f"{len(st.session_state['gesamter_text'])} Dokumente analysiert.")
-    
-    combined = "\n\n".join(st.session_state['gesamter_text'])
-    
-    with st.expander("Gesamten Text anzeigen"):
-        st.text_area("Ergebnisse:", value=combined, height=400)
-    
-    # Recherche-Link (Nutzt das erste erkannte Stichwort)
-    st.markdown("### [🔍 Kombinierte Recherche starten](https://www.google.com/search?q=Málaga+Immobilie+Invest+Check)")
+    st.write("### Gelesener Text:")
+    st.info(st.session_state['text'])
+    st.markdown(f"### [🔍 Dubletten-Recherche starten](https://www.google.com/search?q=Málaga+Immobilie+Check)")
