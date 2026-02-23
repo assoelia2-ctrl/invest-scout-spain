@@ -1,61 +1,59 @@
 import streamlit as st
-import google.generativeai as genai
+import requests
+import base64
 from PIL import Image
-from fpdf import FPDF
 import io
+from fpdf import FPDF
 
-# --- 1. SETUP ---
-st.set_page_config(page_title="Málaga Invest: TOTAL-FIX", layout="wide")
+st.set_page_config(page_title="Málaga Invest: UNSTOPPABLE", layout="wide")
 
-if "GEMINI_API_KEY" not in st.secrets:
-    st.error("🔑 API Key fehlt!")
-    st.stop()
+# API Key abrufen
+api_key = st.secrets.get("GEMINI_API_KEY")
 
-# Wir konfigurieren die API OHNE Beta-Pfad
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+def analyze_images_direct(images, prompt):
+    # Wir erzwingen hier die stabile v1 Schnittstelle manuell!
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    parts = [{"text": prompt}]
+    for img in images:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": base64.b64encode(buf.getvalue()).decode("utf-8")
+            }
+        })
+    
+    payload = {"contents": [{"parts": parts}]}
+    response = requests.post(url, json=payload)
+    return response.json()
 
-# --- DER ULTIMATIVE 404-FIX ---
-# Wir weisen das Modell hier GANZ explizit ohne Präfixe zu
-try:
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except:
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+st.title("🛡️ Invest-Scout: Direkt-Anbindung")
 
-# --- 2. ANALYSE-LOGIK ---
-st.title("🛡️ Invest-Scout: Finaler Malaga-Check")
+files = st.file_uploader("Screenshots:", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-uploaded_files = st.file_uploader("Bilder hochladen:", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+if files and st.button("🚀 ANALYSE ERZWINGEN"):
+    with st.spinner("Breche Blockade auf..."):
+        try:
+            imgs = [Image.open(f) for f in files]
+            prompt = "Expertencheck Málaga: AFO-Status, Rústico/Urbano, Preis-Check m2 und klares Risiko-Fazit."
+            
+            result = analyze_images_direct(imgs, prompt)
+            
+            # Ergebnis extrahieren
+            if "candidates" in result:
+                text = result["candidates"][0]["content"]["parts"][0]["text"]
+                st.session_state["final_res"] = text
+                st.markdown(text)
+            else:
+                st.error(f"Google verweigert Zugriff: {result}")
+        except Exception as e:
+            st.error(f"Fehler: {e}")
 
-if uploaded_files:
-    if st.button("🚀 TIEFENPRÜFUNG JETZT STARTEN"):
-        with st.spinner("🤖 Erzwinge Verbindung zu Google..."):
-            try:
-                images = [Image.open(f) for f in uploaded_files]
-                
-                # Alles drin: AFO, Rústico, Preise, Risiko
-                prompt = """
-                Verhalte dich wie ein Immobilien-Anwalt in Málaga. Analysiere:
-                1. RECHT: AFO-Status & Grundstückstyp (Rústico/Urbano).
-                2. DETAILS: Baulicher Zustand & m2-Check.
-                3. PREIS: Ist das Angebot für Málaga fair?
-                4. FAZIT: Kaufempfehlung (Ja/Nein) & Risiko-Score.
-                """
-                
-                # Wir schalten hier die Beta-Version manuell aus
-                response = model.generate_content([prompt] + images)
-                
-                if response.text:
-                    st.session_state['report'] = response.text
-                    st.markdown(response.text)
-            except Exception as e:
-                # Zeigt uns, ob es immer noch ein 404 ist
-                st.error(f"⚠️ Google-Fehler: {e}")
-
-# PDF Export (Stabil für Umlaute)
-if 'report' in st.session_state:
+if "final_res" in st.session_state:
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    clean_text = st.session_state['report'].encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 10, txt=clean_text)
-    st.download_button("📄 PDF speichern", data=bytes(pdf.output()), file_name="Analyse.pdf")
+    pdf.multi_cell(0, 10, txt=st.session_state["final_res"].encode('latin-1', 'replace').decode('latin-1'))
+    st.download_button("📄 PDF Speichern", data=bytes(pdf.output()), file_name="Analyse.pdf")
