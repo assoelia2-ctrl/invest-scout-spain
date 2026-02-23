@@ -1,13 +1,15 @@
 import streamlit as st
 import requests
 import base64
+from PIL import Image
+import io
 
-# --- 1. GRUNDKONFIGURATION ---
-st.set_page_config(page_title="Málaga Invest Expert", layout="wide", page_icon="🛡️")
+# --- 1. SETUP & DESIGN ---
+st.set_page_config(page_title="Málaga Invest: Final Master", layout="wide", page_icon="🛡️")
 
-# API Key Check
+# API Key Sicherheit
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("Fehler: GROQ_API_KEY fehlt in den Streamlit-Secrets!")
+    st.error("🔑 GROQ_API_KEY fehlt in den Streamlit-Secrets!")
     st.stop()
 
 groq_key = st.secrets["GROQ_API_KEY"]
@@ -15,95 +17,91 @@ groq_key = st.secrets["GROQ_API_KEY"]
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Funktion zur Bildumwandlung
-def encode_image(image_file):
-    return base64.b64encode(image_file.read()).decode('utf-8')
+# --- 2. BILD-OPTIMIERUNG (Gegen Fehler 413/Schnittstellenfehler) ---
+def process_image(image_file):
+    img = Image.open(image_file)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    # Maximale Größe für stabile API-Übertragung
+    img.thumbnail((1024, 1024)) 
+    buffered = io.BytesIO()
+    img.save(buffered, format="JPEG", quality=85)
+    return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-# --- 2. BENUTZEROBERFLÄCHE ---
-st.title("🛡️ Málaga Invest: Multi-Scan & Risiko-Check")
-st.markdown("""
-### So gehst du vor:
-1. Mache Screenshots von der Anzeige (Preis, Text, Fotos).
-2. Wähle **alle** Screenshots gleichzeitig aus.
-3. Klicke auf den Analyse-Button.
-""")
+# --- 3. INTERFACE ---
+st.title("🛡️ Málaga Invest: 100% Risiko- & Objekt-Check")
+st.markdown("Lade Screenshots (Idealista/Fotocasa) oder Fotos vor Ort hoch. Die KI prüft alles auf einmal.")
 
-# Sidebar für die Steuer-Berechnung
+# Sidebar für Finanzen
 with st.sidebar:
-    st.header("📊 Kalkulation")
-    preis_input = st.number_input("Kaufpreis laut Anzeige (€)", value=250000, step=1000)
-    itp = preis_input * 0.07
-    st.write(f"7% ITP Steuer: {itp:,.0f} €")
-    st.subheader(f"Gesamt: {preis_input + itp:,.0f} €")
+    st.header("📊 Investment-Rechner")
+    preis = st.number_input("Kaufpreis (€)", value=250000, step=5000)
+    itp = preis * 0.07
+    st.write(f"7% ITP Steuer: **{itp:,.0f} €**")
+    st.success(f"Gesamt-Invest: **{preis + itp:,.0f} €**")
+    st.divider()
+    st.info("Tipp: Lade mehrere Screenshots hoch (Preis, Beschreibung, Bilder), um das beste Ergebnis zu erhalten.")
 
-# --- 3. MULTI-UPLOAD BEREICH ---
-# HIER IST DIE WICHTIGE ZEILE FÜR MEHRERE DATEIEN:
+# MULTI-UPLOAD BEREICH
 uploaded_files = st.file_uploader(
-    "Screenshots hier hochladen (Mehrfachauswahl möglich):", 
+    "Screenshots/Fotos hier hochladen:", 
     type=["jpg", "png", "jpeg"], 
     accept_multiple_files=True
 )
 
 if uploaded_files:
-    st.info(f"📁 {len(uploaded_files)} Datei(en) ausgewählt.")
-    
-    # Bilder nebeneinander anzeigen
-    cols = st.columns(min(len(uploaded_files), 3))
+    # Zeige Vorschau
+    cols = st.columns(min(len(uploaded_files), 4))
     for i, file in enumerate(uploaded_files):
-        with cols[i % 3]:
+        with cols[i % 4]:
             st.image(file, use_container_width=True)
 
-    if st.button("🚀 ALLE BILDER JETZT ANALYSIEREN", use_container_width=True):
-        with st.spinner("KI liest Texte und Bilder aus..."):
-            
-            # Vorbereitung der Multimodalen Nachricht
-            content_list = [{
-                "type": "text", 
-                "text": """Du bist ein Experte für Immobilieninvestitionen in Málaga. 
-                Analysiere alle hochgeladenen Screenshots zusammenfassend:
-                1. EXTRAKTION: Preis, m2-Anzahl, Anzahl der Zimmer, genauer Ort.
-                2. RISIKO-CHECK: Suche nach Hinweisen auf AFO, Rústico, DAFO, Proindiviso oder Ocupado.
-                3. OPTIK: Zustand der Immobilie, des Pools und der Umgebung bewerten.
-                4. FAZIT: Ist dies ein sicheres Investment oder gibt es 'Red Flags'?"""
-            }]
-            
-            # Alle Bilder zur Liste hinzufügen
-            for file in uploaded_files:
-                base64_img = encode_image(file)
-                content_list.append({
-                    "type": "image_url", 
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-                })
-            
-            payload = {
-                "model": "llama-3.2-11b-vision-preview",
-                "messages": [{"role": "user", "content": content_list}],
-                "temperature": 0.1
-            }
-            
+    if st.button("🚀 VOLL-ANALYSE STARTEN", use_container_width=True):
+        with st.spinner("KI führt Tiefenprüfung durch..."):
             try:
-                response = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {groq_key}"},
-                    json=payload
-                )
-                res_json = response.json()
+                # Der Master-Prompt für alle Prüfverfahren
+                prompt_text = """DU BIST EIN IMMOBILIEN-EXPERTE FÜR ANDALUSIEN.
+                Analysiere alle Bilder GEMEINSAM auf folgende Punkte:
+                1. RECHTLICHE RISIKEN: Suche nach AFO, DAFO, Suelo Rústico, Proindiviso, Ocupado. (SEHR WICHTIG!)
+                2. OBJEKT-DATEN: Preis, m2, Zimmer, Lage aus dem Text extrahieren.
+                3. STANDORT & BODEN: Bewerte die Lage (Hang, Tal, Urban) und Bodenbeschaffenheit laut Fotos.
+                4. ZUSTAND: Analyse von Bausubstanz, Dach, Pool und Modernisierungsbedarf.
+                5. FAZIT: Klare Empfehlung (Kauf, Vorsicht, Finger weg)."""
+
+                content_list = [{"type": "text", "text": prompt_text}]
                 
-                if 'choices' in res_json:
-                    analysis = res_json['choices'][0]['message']['content']
+                for file in uploaded_files:
+                    base64_img = process_image(file)
+                    content_list.append({
+                        "type": "image_url", 
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
+                    })
+                
+                payload = {
+                    "model": "llama-3.2-11b-vision-preview",
+                    "messages": [{"role": "user", "content": content_list}],
+                    "temperature": 0.1
+                }
+                
+                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                
+                if response.status_code == 200:
+                    analysis = response.json()['choices'][0]['message']['content']
                     st.session_state.messages.append({"role": "assistant", "content": analysis})
                     st.rerun()
                 else:
-                    st.error("Fehler von der KI-Schnittstelle erhalten. Bitte erneut versuchen.")
+                    st.error(f"Schnittstellen-Fehler ({response.status_code}): {response.text}")
+
             except Exception as e:
                 st.error(f"Technischer Fehler: {e}")
 
-# --- 4. CHAT-HISTORIE ---
+# --- 4. EXPERTEN-DIALOG ---
 st.divider()
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if chat_input := st.chat_input("Frage zu diesem Objekt stellen..."):
+if chat_input := st.chat_input("Nachfrage zum Objekt stellen..."):
     st.session_state.messages.append({"role": "user", "content": chat_input})
     st.rerun()
