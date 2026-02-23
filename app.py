@@ -1,48 +1,67 @@
-import os
 import streamlit as st
 from fpdf import FPDF
+import os
 
-# 1. App-Konfiguration (Leichtgewicht-Modus)
-st.set_page_config(page_title="Málaga Immobilien-Dossier", layout="wide")
+# App-Konfiguration für mobile Endgeräte
+st.set_page_config(page_title="Málaga Dossier Generator", layout="centered")
 
 def main():
-    st.title("🌴 Málaga Projekt: Dossier-Generator")
-    st.write("Status: App bereit. Warte auf Eingabe...")
+    st.title("🌴 Málaga Immobilien-Projekt")
+    st.subheader("Dossier-Generator (Direkt-Upload)")
+    
+    st.info("Nutze diese Version, um Bilder direkt vom Handy auszuwählen. Du musst keine Ordner mehr manuell erstellen.")
 
-    # Pfad zu deinen Screenshots (Pydroid Standard-Pfad oder relativ)
-    # Nutze '.' für den aktuellen Ordner, in dem das Skript liegt
-    img_dir = "./screenshots" 
+    # 1. Datei-Uploader (Mehrere Bilder gleichzeitig möglich)
+    uploaded_files = st.file_uploader(
+        "Wähle deine Screenshots aus", 
+        accept_multiple_files=True, 
+        type=['png', 'jpg', 'jpeg']
+    )
 
-    # 2. Sicherheitscheck: Existiert der Ordner?
-    if not os.path.exists(img_dir):
-        st.error(f"Ordner '{img_dir}' nicht gefunden. Bitte erstelle ihn!")
-        return
+    if uploaded_files:
+        st.write(f"✅ {len(uploaded_files)} Bilder ausgewählt.")
+        
+        # Name für das fertige PDF
+        pdf_filename = st.text_input("Dateiname für das PDF:", "Malaga_Investment_Report.pdf")
 
-    # 3. UI-Elemente
-    if st.button("🔍 Screenshots scannen & PDF erstellen"):
-        with st.spinner("Verarbeite Bilder... bitte warten."):
-            try:
-                # Bilder suchen
-                images = [f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg'))]
-                
-                if not images:
-                    st.warning("Keine Bilder im Ordner gefunden.")
-                else:
-                    # PDF Logik (Minimalistisch)
+        if st.button("🚀 PDF jetzt generieren"):
+            with st.spinner("Erstelle Dossier..."):
+                try:
                     pdf = FPDF()
-                    for img in images:
+                    
+                    for uploaded_file in uploaded_files:
+                        # Temporäres Speichern des Bildes für FPDF
+                        temp_name = f"temp_{uploaded_file.name}"
+                        with open(temp_name, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        
+                        # Neue Seite im PDF
                         pdf.add_page()
-                        clean_name = img.replace('_', ' ').split('.')[0]
-                        pdf.set_font("Arial", size=12)
-                        pdf.cell(200, 10, txt=clean_name, ln=1, align='C')
-                        pdf.image(os.path.join(img_dir, img), x=10, y=25, w=190)
+                        
+                        # Titel aus dem Dateinamen (schön formatiert)
+                        title = uploaded_file.name.replace('_', ' ').split('.')[0]
+                        pdf.set_font("Arial", 'B', size=14)
+                        pdf.cell(0, 10, txt=title, ln=1, align='C')
+                        
+                        # Bild einfügen (skaliert auf A4 Breite)
+                        pdf.image(temp_name, x=10, y=25, w=190)
+                        
+                        # Temporäre Datei löschen (Speicher sparen)
+                        os.remove(temp_name)
                     
-                    output_file = "Malaga_Analyse.pdf"
-                    pdf.output(output_name := output_file)
-                    st.success(f"✅ Fertig! Datei gespeichert als: {output_name}")
+                    # PDF erstellen
+                    pdf.output(pdf_filename)
                     
-            except Exception as e:
-                st.error(f"Fehler aufgetreten: {str(e)}")
-
-if __name__ == "__main__":
-    main()
+                    st.success(f"Dossier '{pdf_filename}' erfolgreich erstellt!")
+                    
+                    # Download-Button anzeigen
+                    with open(pdf_filename, "rb") as file:
+                        st.download_button(
+                            label="⬇️ PDF herunterladen",
+                            data=file,
+                            file_name=pdf_filename,
+                            mime="application/pdf"
+                        )
+                        
+                except Exception as e:
+                    st.error(f"Fe
