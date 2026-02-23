@@ -3,117 +3,79 @@ import requests
 import base64
 from PIL import Image
 import io
-import time
 
-# --- 1. CONFIG & SAFETY ---
-st.set_page_config(page_title="Málaga Invest: Ultra-Safe Mode", layout="wide")
+# --- 1. SETUP ---
+st.set_page_config(page_title="Málaga Invest Expert", layout="wide", page_icon="🛡️")
 
-# Sicherstellen, dass der Key da ist
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("❌ Kritischer Fehler: GROQ_API_KEY fehlt in den Secrets!")
+    st.error("🔑 GROQ_API_KEY fehlt in den Streamlit-Secrets!")
     st.stop()
 
 groq_key = st.secrets["GROQ_API_KEY"]
 
-# --- 2. INTELLIGENTE BILD-VERKLEINERUNG (Gegen den Schnittstellen-Fehler) ---
-def process_and_optimize_image(image_file):
-    try:
-        img = Image.open(image_file)
-        # Umwandlung in RGB (behebt Probleme mit Handy-PNGs)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        
-        # Maximale Auflösung reduzieren (KI braucht keine 4K Bilder)
-        # Das spart ca. 80% der Datenmenge ein
-        img.thumbnail((1000, 1000)) 
-        
-        buffered = io.BytesIO()
-        img.save(buffered, format="JPEG", quality=75, optimize=True)
-        return base64.b64encode(buffered.getvalue()).decode('utf-8')
-    except Exception as e:
-        st.error(f"⚠️ Bild konnte nicht verarbeitet werden: {e}")
-        return None
+# --- 2. BILD-OPTIMIERUNG ---
+def process_image(image_file):
+    img = Image.open(image_file)
+    if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+    img.thumbnail((1024, 1024)) 
+    buffered = io.BytesIO()
+    img.save(buffered, format="JPEG", quality=80)
+    return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-# --- 3. BENUTZEROBERFLÄCHE ---
-st.title("🛡️ Invest-Scout: 100% Risiko-Prüfung")
-st.info("Lade deine Screenshots hoch. Die App optimiert diese automatisch für die Analyse.")
+# --- 3. UI ---
+st.title("🛡️ Invest-Scout: Risiko- & Standort-Check")
 
-# Dateiupload mit Multi-Support
 uploaded_files = st.file_uploader(
-    "Screenshots wählen:", 
+    "Screenshots (Idealista, Fotos etc.) hochladen:", 
     type=["jpg", "png", "jpeg"], 
-    accept_multiple_files=True,
-    help="Du kannst mehrere Bilder gleichzeitig auswählen."
+    accept_multiple_files=True
 )
 
 if uploaded_files:
-    st.success(f"✅ {len(uploaded_files)} Bilder bereit zur Analyse.")
+    st.info(f"✅ {len(uploaded_files)} Bilder bereit zur Analyse.")
     
     if st.button("🚀 TIEFENPRÜFUNG STARTEN", use_container_width=True):
-        with st.spinner("KI analysiert Risiko, Boden & Baurecht..."):
+        with st.spinner("Prüfe Recht, Boden, Zustand & Preis..."):
             try:
-                # 1. Bilder vorbereiten
-                images_to_send = []
-                for file in uploaded_files:
-                    encoded = process_and_optimize_image(file)
-                    if encoded:
-                        images_to_send.append(encoded)
-
-                if not images_to_send:
-                    st.error("Keine gültigen Bilder gefunden.")
-                    st.stop()
-
-                # 2. KI-Anfrage zusammenbauen
-                # Hier sind alle deine Anforderungen (AFO, Boden, etc.) drin
+                # Der Master-Prompt für all deine Anforderungen
                 content_list = [{
                     "type": "text", 
-                    "text": """ANALYSYSE-AUFTRAG:
-                    1. RECHT: Suche nach AFO, Rústico, DAFO, Ocupado, Proindiviso.
-                    2. BODEN: Analysiere Bodenbeschaffenheit & Lage (Urbano/Rústico).
-                    3. ZUSTAND: Prüfe Bausubstanz, Pool, Dach & Renovierungsbedarf.
-                    4. DATEN: Extrahiere Preis, m2 und genauen Standort.
-                    Gib am Ende eine klare Empfehlung aus."""
+                    "text": """DU BIST EIN IMMOBILIEN-EXPERTE FÜR MÁLAGA.
+                    Prüfe diese Bilder GEMEINSAM auf:
+                    1. RECHT: AFO, DAFO, Suelo Rústico, Ocupado, Proindiviso.
+                    2. STANDORT: Bodenbeschaffenheit, Lage (Urbano/Rústico).
+                    3. ZUSTAND: Pool, Dach, Fassade, Renovierungsstau.
+                    4. DATEN: Preis, m2, genauer Ort."""
                 }]
                 
-                for b64_img in images_to_send:
+                for file in uploaded_files:
+                    encoded = process_image(file)
                     content_list.append({
                         "type": "image_url", 
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                        "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}
                     })
-
-                # 3. Anfrage mit Fehler-Management
+                
+                # --- HIER IST DIE GEÄNDERTE ZEILE ---
                 payload = {
-                    "model": "llama-3.2-11b-vision-preview",
+                    "model": "llama-3.2-90b-vision-preview",
                     "messages": [{"role": "user", "content": content_list}],
                     "temperature": 0.1
                 }
                 
-                headers = {
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                }
-
-                # Versuche die Anfrage bis zu 2 Mal bei Timeouts
-                response = requests.post(
+                res = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=60
+                    headers={"Authorization": f"Bearer {groq_key}"},
+                    json=payload
                 )
-
-                if response.status_code == 200:
-                    result = response.json()['choices'][0]['message']['content']
-                    st.markdown("---")
+                
+                if res.status_code == 200:
                     st.markdown("### 📋 Analyse-Ergebnis")
-                    st.markdown(result)
-                elif response.status_code == 413:
-                    st.error("❌ Die Bilder sind immer noch zu groß. Bitte lade weniger Bilder gleichzeitig hoch.")
+                    st.markdown(res.json()['choices'][0]['message']['content'])
                 else:
-                    st.error(f"❌ KI-Fehler ({response.status_code}): {response.text}")
-
+                    st.error(f"Fehler: {res.status_code}. Melde dich beim Admin.")
+                    st.write(res.text) # Zeigt uns Details, falls es doch noch hakt
             except Exception as e:
-                st.error(f"🆘 Technischer Absturz: {e}")
+                st.error(f"Technischer Fehler: {e}")
 
-# Footer
 st.divider()
-st.caption("Málaga Invest Scout v3.0 - Optimiert für Vision-Analyse")
+st.caption("Version 4.0 - Modell: Llama 90B Vision")
