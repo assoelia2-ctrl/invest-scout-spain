@@ -1,3 +1,5 @@
 streamlit
-pillow
+pytesseract
+Pillow
 fpdf2
+pandas
