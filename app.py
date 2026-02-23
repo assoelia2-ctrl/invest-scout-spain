@@ -2,69 +2,60 @@ import streamlit as st
 from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
 import pandas as pd
-import re
 
-# 1. SEITE INITIALISIEREN
-st.set_page_config(page_title="Málaga Invest: Final", layout="wide")
+# 1. Seite konfigurieren
+st.set_page_config(page_title="Málaga Invest: Hard Reset", layout="wide")
 
-# Speicher für Daten fest anlegen (Schutz vor NameError)
-if 'text_inhalt' not in st.session_state:
-    st.session_state['text_inhalt'] = ""
+st.title("🛡️ Invest-Scout: Foto-Fix & Analyse")
 
-st.title("🛡️ Invest-Scout: Analyse & Recherche")
+# 2. DER SPEICHER-PUTZTRUPP
+# Wenn ein neues File hochgeladen wird, löschen wir den alten Text sofort
+if 'doc_text' not in st.session_state:
+    st.session_state['doc_text'] = ""
 
-# 2. DER STABILE UPLOAD (isoliert mit eigenem Key)
-uploaded_file = st.file_uploader("Bild oder Screenshot hochladen:", type=["jpg", "png", "jpeg"], key="final_uploader_99")
+def reset_data():
+    st.session_state['doc_text'] = ""
 
-if uploaded_file:
-    img = Image.open(uploaded_file)
+# 3. DER UPLOADER (mit Reset-Funktion)
+file = st.file_uploader("Bild oder Foto hochladen:", 
+                         type=["jpg", "png", "jpeg"], 
+                         key="stable_up_v3",
+                         on_change=reset_data) # Löscht alten Text bei neuem Bild
+
+if file:
+    img = Image.open(file)
     
-    # Foto-Optimierung (Verhindert Abstürze bei großen Dateien)
+    # FOTO-VERKLEINERUNG (Bleibt drin!)
     if img.width > 1800 or img.height > 1800:
         img.thumbnail((1500, 1500))
     
     st.image(img, caption="Datei bereit", use_container_width=True)
     
-    # Buttons in einer Reihe
-    col_anal, col_rech = st.columns(2)
-    
-    with col_anal:
-        if st.button("🚀 ANALYSE STARTEN"):
-            with st.spinner("KI liest Daten..."):
-                try:
-                    # Bildverbesserung für OCR
-                    proc = ImageOps.grayscale(img)
-                    proc = ImageEnhance.Contrast(proc).enhance(2.0)
-                    text = pytesseract.image_to_string(proc, lang='deu+spa')
-                    st.session_state['text_inhalt'] = text
-                    st.success("Analyse erfolgreich!")
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
+    if st.button("🚀 ANALYSE STARTEN"):
+        with st.spinner("KI verarbeitet Bild..."):
+            try:
+                # Bildoptimierung
+                proc = ImageOps.grayscale(img)
+                proc = ImageEnhance.Contrast(proc).enhance(2.0)
+                
+                # Texterkennung
+                text = pytesseract.image_to_string(proc, lang='deu+spa')
+                st.session_state['doc_text'] = text
+                st.success("Analyse erfolgreich!")
+            except Exception as e:
+                st.error(f"Fehler: {e}")
 
-    with col_rech:
-        # Recherche-Link (Dublettenprüfung)
-        st.markdown(f"### [🔍 Dubletten-Check im Internet](https://www.google.com/search?q=Málaga+Immobilie+Recherche)")
-
-# 3. INTERAKTION (Nur wenn Text da ist)
-if st.session_state['text_inhalt']:
+# 4. ANZEIGE & KOMMUNIKATION (Nur wenn Text existiert)
+if st.session_state['doc_text']:
     st.divider()
     
-    # Automatische Highlights anzeigen
-    t = st.session_state['text_inhalt']
-    flaeche = re.findall(r'\d+[\d.,]*\s?m2', t)
+    # Karte anzeigen
+    st.map(pd.DataFrame({'lat': [36.7212], 'lon': [-4.4214]}))
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.info(f"📏 **Gefundene Fläche:** {flaeche[0] if flaeche else 'n.a.'}")
-        st.write("📍 **Standort:** Málaga Region")
-        st.map(pd.DataFrame({'lat': [36.7212], 'lon': [-4.4214]}))
-    
-    with c2:
-        st.subheader("💬 Frage zum Objekt")
-        frage = st.text_input("z.B. 'Bohrbrunnen?'")
-        if frage:
-            if frage.lower() in t.lower():
-                pos = t.lower().find(frage.lower())
-                st.success(f"Gefunden: ...{t[max(0, pos-50):pos+100]}...")
-            else:
-                st.warning("Kein Treffer im Scan.")
+    # Einfache Abfrage
+    query = st.text_input("Frag nach Details (z.B. Bohrbrunnen):")
+    if query:
+        t = st.session_state['doc_text'].lower()
+        if query.lower() in t:
+            st.success(f"Gefunden!")
+            st.write(st.session_state['doc_text'])
