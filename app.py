@@ -1,57 +1,86 @@
 import streamlit as st
 from fpdf import FPDF
+import google.generativeai as genai
 import os
+from PIL import Image
 
-# Konfiguration
-st.set_page_config(page_title="Andalusien Invest AI", layout="wide")
+# --- KONFIGURATION ---
+st.set_page_config(page_title="Andalusien AI Expert", layout="wide")
+
+# Hier deinen Key eingeben oder über Sidebar steuern
+api_key = st.sidebar.text_input("Gemini API Key eingeben", type="password")
+
+if api_key:
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash') # Schnelles Vision-Modell
+
+def analyze_image(img):
+    """Sendet das Bild an die KI zur Investment-Analyse"""
+    prompt = """
+    Du bist ein erfahrener Immobilien-Gutachter in Andalusien. 
+    Analysiere diesen Screenshot einer Immobilie/eines Grundstücks:
+    1. Zustand von Dach und Fassade (Renovierungsstau?).
+    2. Beurteilung der Zufahrt und des Geländes (Schatten, Boden).
+    3. Solar-Potential (Dachausrichtung/Hindernisse).
+    4. Nachbarschaft/Lage-Eindruck.
+    Gib mir kurz und prägnant:
+    - TOP 3 CHANCEN
+    - TOP 3 RISIKEN
+    """
+    response = model.generate_content([prompt, img])
+    return response.text
 
 def main():
     st.title("☀️ Andalusien Real Estate AI-Expert")
+    st.subheader("Automatischer Risiko- & Chancen-Check")
 
-    col_input, col_ai = st.columns([1.5, 1])
+    Dateien = st.file_uploader("Objekt-Screenshots hochladen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
-    with col_input:
-        st.subheader("📸 Objekt-Analyse")
-        Dateien = st.file_uploader("Screenshots für KI-Check hochladen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+    if Dateien:
+        if not api_key:
+            st.warning("Bitte gib links in der Sidebar deinen API-Key ein, um die KI-Analyse zu starten.")
         
-        objekt_daten = []
-        if Dateien:
-            for i, d in enumerate(Dateien):
-                with st.expander(f"Objekt {i+1} Analyse", expanded=True):
-                    st.image(d, width=300)
+        objekt_ergebnisse = []
+
+        for i, d in enumerate(Dateien):
+            col1, col2 = st.columns([1, 1])
+            img = Image.open(d)
+            
+            with col1:
+                st.image(img, caption=f"Objekt {i+1}", use_container_width=True)
+                stadt = st.text_input(f"Stadt/Lage ({i})", key=f"s_{i}")
+                preis = st.number_input(f"Kaufpreis € ({i})", key=f"p_{i}")
+
+            with col2:
+                if st.button(f"🔍 KI-Analyse starten für Objekt {i+1}", key=f"btn_{i}"):
+                    with st.spinner("KI untersucht das Bild..."):
+                        analyse_text = analyze_image(img)
+                        st.session_state[f"analysis_{i}"] = analyse_text
+                
+                if f"analysis_{i}" in st.session_state:
+                    st.markdown("### 🤖 KI-Gutachten")
+                    st.write(st.session_state[f"analysis_{i}"])
                     
-                    # KI-Checkliste Buttons
-                    st.write("**KI-Schnellcheck für diesen Screenshot:**")
-                    c1, c2, c3 = st.columns(3)
-                    
-                    check_request = ""
-                    if c1.button(f"🔍 Schatten & Licht ({i})"):
-                        check_request = "Analysiere den Schattenwurf auf diesem Bild. Wo ist Süden? Wie ist die Lichtsituation?"
-                    if c2.button(f"🌿 Vegetation & Boden ({i})"):
-                        check_request = "Welche Bepflanzung ist erkennbar? Wie wirkt der Untergrund (felsig, sandig, gepflegt)?"
-                    if c3.button(f"🚗 Zufahrt & Zugang ({i})"):
-                        check_request = "Wie sieht die Zufahrt aus? Asphaltiert, Schotterweg, eng oder breit genug für LKW?"
+                    objekt_ergebnisse.append({
+                        "stadt": stadt,
+                        "preis": preis,
+                        "analyse": st.session_state[f"analysis_{i}"],
+                        "file": d
+                    })
 
-                    if check_request:
-                        st.info(f"KI-Analyse läuft für: {check_request}")
-                        # Hier würde die KI-Schnittstelle das Bild lesen
-                        st.session_state.current_analysis = f"Ergebnis für Objekt {i+1}: Basierend auf dem Bild scheint die Zufahrt {check_request.split()[-1]} zu sein..."
-
-                    # Manuelle Daten für PDF
-                    stadt = st.text_input(f"Lage/Name ({i})", key=f"stadt_{i}")
-                    preis = st.number_input(f"Preis € ({i})", key=f"preis_{i}")
-                    objekt_daten.append({"stadt": stadt, "preis": preis, "file": d})
-
-    with col_ai:
-        st.subheader("🤖 KI-Berater Feedback")
-        if "current_analysis" in st.session_state:
-            st.success(st.session_state.current_analysis)
-        else:
-            st.write("Wähle links einen Analyse-Punkt aus.")
-        
-        st.divider()
-        st.write("**Profi-Tipp für Andalusien:**")
-        st.warning("Achte bei der Zufahrt auf 'Carril'-Regelungen. Viele Wege sind privat und müssen instand gehalten werden.")
+        if objekt_ergebnisse and st.button("🚀 Profi-Report als PDF exportieren"):
+            pdf = FPDF()
+            for obj in objekt_ergebnisse:
+                pdf.add_page()
+                pdf.set_font("Arial", 'B', 16)
+                pdf.cell(0, 10, f"Exposé: {obj['stadt']}", ln=1)
+                pdf.set_font("Arial", '', 11)
+                pdf.multi_cell(0, 7, f"\nKI-ANALYSE:\n{obj['analyse']}")
+                # Bild hinzufügen (vereinfacht)
+                # ... (Bild-Export-Logik wie gehabt)
+            
+            pdf.output("Andalusien_Expert_Report.pdf")
+            st.success("Dossier mit KI-Gutachten erstellt!")
 
 if __name__ == "__main__":
     main()
