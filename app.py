@@ -1,79 +1,57 @@
 import streamlit as st
 from fpdf import FPDF
 import os
-import urllib.parse
 
-st.set_page_config(page_title="Andalusien Invest Master", layout="wide")
+# Konfiguration
+st.set_page_config(page_title="Andalusien Invest AI", layout="wide")
 
 def main():
-    st.title("☀️ Andalusien Real Estate Master-Cockpit")
-    st.markdown("---")
-    
-    # Drei-Spalten-Layout: Suche, Analyse, Chat
-    col_search, col_analysis, col_chat = st.columns([1, 1.5, 1])
+    st.title("☀️ Andalusien Real Estate AI-Expert")
 
-    # --- SPALTE 1: OBJEKT-RECHERCHE (NEU) ---
-    with col_search:
-        st.subheader("🔍 Marktsuche")
-        st.write("Suche nach neuen Angeboten:")
-        search_query = st.text_input("Suchbegriff", placeholder="z.B. Malaga Finca Altstadt")
+    col_input, col_ai = st.columns([1.5, 1])
+
+    with col_input:
+        st.subheader("📸 Objekt-Analyse")
+        Dateien = st.file_uploader("Screenshots für KI-Check hochladen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         
-        if search_query:
-            st.write("Suche öffnen auf:")
-            q_encoded = urllib.parse.quote(search_query)
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                st.link_button("🏠 Idealista", f"https://www.idealista.com/buscar/venta-viviendas/{q_encoded}/")
-                st.link_button("🏢 Fotocasa", f"https://www.fotocasa.es/es/comprar/viviendas/{q_encoded}/l/1")
-            with c2:
-                st.link_button("🌍 Kyero", f"https://www.kyero.com/de/spain-eigentum-kaufen-0l1?q={q_encoded}")
-                st.link_button("🔎 Google", f"https://www.google.com/search?q={q_encoded}+andalucia+property+sale")
-            
-            st.info("💡 Tipp: Mache einen Screenshot vom Angebot und lade ihn rechts hoch.")
-
-    # --- SPALTE 2: ANALYSE & PDF ---
-    with col_analysis:
-        st.subheader("📸 Analyse & Upload")
-        Dateien = st.file_uploader("Screenshots hier ablegen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-        objekt_liste = []
-
+        objekt_daten = []
         if Dateien:
             for i, d in enumerate(Dateien):
-                with st.expander(f"Objekt {i+1}", expanded=True):
-                    c1, c2 = st.columns(2)
-                    with c1: prov = st.selectbox(f"Provinz", ["Almeria", "Cadiz", "Cordoba", "Granada", "Huelva", "Jaen", "Malaga", "Sevilla"], index=6, key=f"p{i}")
-                    with c2: stadt = st.text_input(f"Stadt", placeholder="Lage", key=f"s{i}")
-                    c3, c4 = st.columns(2)
-                    with c3: preis = st.number_input(f"Preis €", value=0.0, step=5000.0, key=f"pr{i}")
-                    with c4: flaeche = st.number_input(f"m²", value=0.0, step=1.0, key=f"m{i}")
+                with st.expander(f"Objekt {i+1} Analyse", expanded=True):
+                    st.image(d, width=300)
                     
-                    if stadt and preis > 0:
-                        objekt_liste.append({"prov": prov, "stadt": stadt, "preis": preis, "flaeche": flaeche, "file": d})
+                    # KI-Checkliste Buttons
+                    st.write("**KI-Schnellcheck für diesen Screenshot:**")
+                    c1, c2, c3 = st.columns(3)
+                    
+                    check_request = ""
+                    if c1.button(f"🔍 Schatten & Licht ({i})"):
+                        check_request = "Analysiere den Schattenwurf auf diesem Bild. Wo ist Süden? Wie ist die Lichtsituation?"
+                    if c2.button(f"🌿 Vegetation & Boden ({i})"):
+                        check_request = "Welche Bepflanzung ist erkennbar? Wie wirkt der Untergrund (felsig, sandig, gepflegt)?"
+                    if c3.button(f"🚗 Zufahrt & Zugang ({i})"):
+                        check_request = "Wie sieht die Zufahrt aus? Asphaltiert, Schotterweg, eng oder breit genug für LKW?"
 
-            if objekt_liste:
-                st.divider()
-                st.subheader("📊 Kalkulation")
-                for o in objekt_liste:
-                    total = o["preis"] * 1.085 # Inkl. Steuern/Notar
-                    st.write(f"**{o['stadt']}**: {o['preis']:,.0f}€ → **{total:,.2f}€** Gesamtbedarf")
-                
-                if st.button("🚀 Dossier (PDF) erstellen"):
-                    # PDF Logik (wie bisher)
-                    st.success("PDF erstellt!")
+                    if check_request:
+                        st.info(f"KI-Analyse läuft für: {check_request}")
+                        # Hier würde die KI-Schnittstelle das Bild lesen
+                        st.session_state.current_analysis = f"Ergebnis für Objekt {i+1}: Basierend auf dem Bild scheint die Zufahrt {check_request.split()[-1]} zu sein..."
 
-    # --- SPALTE 3: KI CHAT ---
-    with col_chat:
-        st.subheader("💬 Assistent")
-        if "messages" not in st.session_state:
-            st.session_state.messages = [{"role": "assistant", "content": "Welche Region in Andalusien interessiert dich gerade?"}]
-        for msg in st.session_state.messages:
-            st.chat_message(msg["role"]).write(msg["content"])
-        if prompt := st.chat_input("Fragen..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.chat_message("user").write(prompt)
-            # Platzhalter für KI-Antwort
-            st.chat_message("assistant").write("Ich analysiere den Markt für dich...")
+                    # Manuelle Daten für PDF
+                    stadt = st.text_input(f"Lage/Name ({i})", key=f"stadt_{i}")
+                    preis = st.number_input(f"Preis € ({i})", key=f"preis_{i}")
+                    objekt_daten.append({"stadt": stadt, "preis": preis, "file": d})
+
+    with col_ai:
+        st.subheader("🤖 KI-Berater Feedback")
+        if "current_analysis" in st.session_state:
+            st.success(st.session_state.current_analysis)
+        else:
+            st.write("Wähle links einen Analyse-Punkt aus.")
+        
+        st.divider()
+        st.write("**Profi-Tipp für Andalusien:**")
+        st.warning("Achte bei der Zufahrt auf 'Carril'-Regelungen. Viele Wege sind privat und müssen instand gehalten werden.")
 
 if __name__ == "__main__":
     main()
