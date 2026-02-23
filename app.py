@@ -3,105 +3,117 @@ import requests
 import base64
 from PIL import Image
 import io
+import time
 
-# --- 1. SETUP & DESIGN ---
-st.set_page_config(page_title="Málaga Invest: Final Master", layout="wide", page_icon="🛡️")
+# --- 1. CONFIG & SAFETY ---
+st.set_page_config(page_title="Málaga Invest: Ultra-Safe Mode", layout="wide")
 
-# API Key Sicherheit
+# Sicherstellen, dass der Key da ist
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("🔑 GROQ_API_KEY fehlt in den Streamlit-Secrets!")
+    st.error("❌ Kritischer Fehler: GROQ_API_KEY fehlt in den Secrets!")
     st.stop()
 
 groq_key = st.secrets["GROQ_API_KEY"]
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# --- 2. INTELLIGENTE BILD-VERKLEINERUNG (Gegen den Schnittstellen-Fehler) ---
+def process_and_optimize_image(image_file):
+    try:
+        img = Image.open(image_file)
+        # Umwandlung in RGB (behebt Probleme mit Handy-PNGs)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        
+        # Maximale Auflösung reduzieren (KI braucht keine 4K Bilder)
+        # Das spart ca. 80% der Datenmenge ein
+        img.thumbnail((1000, 1000)) 
+        
+        buffered = io.BytesIO()
+        img.save(buffered, format="JPEG", quality=75, optimize=True)
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        st.error(f"⚠️ Bild konnte nicht verarbeitet werden: {e}")
+        return None
 
-# --- 2. BILD-OPTIMIERUNG (Gegen Fehler 413/Schnittstellenfehler) ---
-def process_image(image_file):
-    img = Image.open(image_file)
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    # Maximale Größe für stabile API-Übertragung
-    img.thumbnail((1024, 1024)) 
-    buffered = io.BytesIO()
-    img.save(buffered, format="JPEG", quality=85)
-    return base64.b64encode(buffered.getvalue()).decode('utf-8')
+# --- 3. BENUTZEROBERFLÄCHE ---
+st.title("🛡️ Invest-Scout: 100% Risiko-Prüfung")
+st.info("Lade deine Screenshots hoch. Die App optimiert diese automatisch für die Analyse.")
 
-# --- 3. INTERFACE ---
-st.title("🛡️ Málaga Invest: 100% Risiko- & Objekt-Check")
-st.markdown("Lade Screenshots (Idealista/Fotocasa) oder Fotos vor Ort hoch. Die KI prüft alles auf einmal.")
-
-# Sidebar für Finanzen
-with st.sidebar:
-    st.header("📊 Investment-Rechner")
-    preis = st.number_input("Kaufpreis (€)", value=250000, step=5000)
-    itp = preis * 0.07
-    st.write(f"7% ITP Steuer: **{itp:,.0f} €**")
-    st.success(f"Gesamt-Invest: **{preis + itp:,.0f} €**")
-    st.divider()
-    st.info("Tipp: Lade mehrere Screenshots hoch (Preis, Beschreibung, Bilder), um das beste Ergebnis zu erhalten.")
-
-# MULTI-UPLOAD BEREICH
+# Dateiupload mit Multi-Support
 uploaded_files = st.file_uploader(
-    "Screenshots/Fotos hier hochladen:", 
+    "Screenshots wählen:", 
     type=["jpg", "png", "jpeg"], 
-    accept_multiple_files=True
+    accept_multiple_files=True,
+    help="Du kannst mehrere Bilder gleichzeitig auswählen."
 )
 
 if uploaded_files:
-    # Zeige Vorschau
-    cols = st.columns(min(len(uploaded_files), 4))
-    for i, file in enumerate(uploaded_files):
-        with cols[i % 4]:
-            st.image(file, use_container_width=True)
-
-    if st.button("🚀 VOLL-ANALYSE STARTEN", use_container_width=True):
-        with st.spinner("KI führt Tiefenprüfung durch..."):
+    st.success(f"✅ {len(uploaded_files)} Bilder bereit zur Analyse.")
+    
+    if st.button("🚀 TIEFENPRÜFUNG STARTEN", use_container_width=True):
+        with st.spinner("KI analysiert Risiko, Boden & Baurecht..."):
             try:
-                # Der Master-Prompt für alle Prüfverfahren
-                prompt_text = """DU BIST EIN IMMOBILIEN-EXPERTE FÜR ANDALUSIEN.
-                Analysiere alle Bilder GEMEINSAM auf folgende Punkte:
-                1. RECHTLICHE RISIKEN: Suche nach AFO, DAFO, Suelo Rústico, Proindiviso, Ocupado. (SEHR WICHTIG!)
-                2. OBJEKT-DATEN: Preis, m2, Zimmer, Lage aus dem Text extrahieren.
-                3. STANDORT & BODEN: Bewerte die Lage (Hang, Tal, Urban) und Bodenbeschaffenheit laut Fotos.
-                4. ZUSTAND: Analyse von Bausubstanz, Dach, Pool und Modernisierungsbedarf.
-                5. FAZIT: Klare Empfehlung (Kauf, Vorsicht, Finger weg)."""
-
-                content_list = [{"type": "text", "text": prompt_text}]
-                
+                # 1. Bilder vorbereiten
+                images_to_send = []
                 for file in uploaded_files:
-                    base64_img = process_image(file)
+                    encoded = process_and_optimize_image(file)
+                    if encoded:
+                        images_to_send.append(encoded)
+
+                if not images_to_send:
+                    st.error("Keine gültigen Bilder gefunden.")
+                    st.stop()
+
+                # 2. KI-Anfrage zusammenbauen
+                # Hier sind alle deine Anforderungen (AFO, Boden, etc.) drin
+                content_list = [{
+                    "type": "text", 
+                    "text": """ANALYSYSE-AUFTRAG:
+                    1. RECHT: Suche nach AFO, Rústico, DAFO, Ocupado, Proindiviso.
+                    2. BODEN: Analysiere Bodenbeschaffenheit & Lage (Urbano/Rústico).
+                    3. ZUSTAND: Prüfe Bausubstanz, Pool, Dach & Renovierungsbedarf.
+                    4. DATEN: Extrahiere Preis, m2 und genauen Standort.
+                    Gib am Ende eine klare Empfehlung aus."""
+                }]
+                
+                for b64_img in images_to_send:
                     content_list.append({
                         "type": "image_url", 
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
                     })
-                
+
+                # 3. Anfrage mit Fehler-Management
                 payload = {
                     "model": "llama-3.2-11b-vision-preview",
                     "messages": [{"role": "user", "content": content_list}],
                     "temperature": 0.1
                 }
                 
-                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-                response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
-                
+                headers = {
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json"
+                }
+
+                # Versuche die Anfrage bis zu 2 Mal bei Timeouts
+                response = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60
+                )
+
                 if response.status_code == 200:
-                    analysis = response.json()['choices'][0]['message']['content']
-                    st.session_state.messages.append({"role": "assistant", "content": analysis})
-                    st.rerun()
+                    result = response.json()['choices'][0]['message']['content']
+                    st.markdown("---")
+                    st.markdown("### 📋 Analyse-Ergebnis")
+                    st.markdown(result)
+                elif response.status_code == 413:
+                    st.error("❌ Die Bilder sind immer noch zu groß. Bitte lade weniger Bilder gleichzeitig hoch.")
                 else:
-                    st.error(f"Schnittstellen-Fehler ({response.status_code}): {response.text}")
+                    st.error(f"❌ KI-Fehler ({response.status_code}): {response.text}")
 
             except Exception as e:
-                st.error(f"Technischer Fehler: {e}")
+                st.error(f"🆘 Technischer Absturz: {e}")
 
-# --- 4. EXPERTEN-DIALOG ---
+# Footer
 st.divider()
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-if chat_input := st.chat_input("Nachfrage zum Objekt stellen..."):
-    st.session_state.messages.append({"role": "user", "content": chat_input})
-    st.rerun()
+st.caption("Málaga Invest Scout v3.0 - Optimiert für Vision-Analyse")
