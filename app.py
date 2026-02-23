@@ -22,7 +22,9 @@ def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, txt=text.encode('latin-1', 'replace').decode('latin-1'))
+    # Bereinigung für PDF-Stabilität
+    clean_text = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean_text)
     return pdf.output()
 
 # --- UI ---
@@ -39,7 +41,7 @@ if uploaded_files:
                 # Auftrag
                 prompt = "Analysiere auf: AFO, Rústico, Preis, m2 und Zustand. Fazit am Ende."
                 
-                # DIE ANFRAGE (mit Fallback-Logik)
+                # DIE ANFRAGE
                 response = model.generate_content([prompt] + imgs)
                 
                 if response.text:
@@ -48,7 +50,7 @@ if uploaded_files:
                     st.markdown(response.text)
             except Exception as e:
                 st.error(f"Schnittstellen-Fehler: {e}")
-                st.info("Tipp: Wenn 404 erscheint, App einmal komplett löschen und neu verbinden.")
+                st.info("Wichtig: App einmal komplett LÖSCHEN und neu verbinden, wenn 404 bleibt.")
 
 if 'analysis' in st.session_state:
     try:
