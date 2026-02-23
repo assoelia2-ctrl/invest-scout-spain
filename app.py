@@ -1,51 +1,48 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
 import pandas as pd
 import re
 
-st.set_page_config(page_title="Málaga Invest: FULL ANALYSE", layout="wide")
-
-st.title("🛡️ Invest-Scout: Analyse & Karte")
-
-file = st.file_uploader("Screenshot hochladen:", type=["jpg", "png", "jpeg"])
+# ... (dein bisheriger Setup-Code) ...
 
 if file:
     img = Image.open(file)
-    st.image(img, caption="Bild erkannt", use_container_width=True)
+    st.image(img, caption="Bild/Foto empfangen", use_container_width=True)
     
-    if st.button("🚀 ANALYSE STARTEN"):
-        with st.spinner("Lese Daten aus dem Bild..."):
+    if st.button("🚀 TIEFENANALYSE STARTEN"):
+        with st.spinner("Optimiere Foto für Analyse..."):
             try:
-                # 1. TEXT LESEN
-                text = pytesseract.image_to_string(img, lang='deu')
+                # --- FOTO-OPTIMIERUNG ---
+                # 1. In Graustufen umwandeln
+                img_gray = ImageOps.grayscale(img)
+                # 2. Kontrast extrem erhöhen (hilft bei Schatten auf Fotos)
+                enhancer = ImageEnhance.Contrast(img_gray)
+                img_final = enhancer.enhance(2.0)
                 
-                # 2. ANALYSE (Wir suchen nach Keywords im Text)
-                afo = "Ja (im Text gefunden)" if "AFO" in text.upper() else "Nicht explizit erwähnt"
-                preis = re.findall(r'\d+[\d.,]*\s?€', text) # Sucht nach € Beträgen
-                m2 = re.findall(r'\d+[\d.,]*\s?m2', text.lower()) # Sucht nach m2
+                # --- TEXT EXTRAKTION ---
+                # Wir geben Tesseract einen Hinweis, dass es nach Blöcken suchen soll
+                custom_config = r'--oem 3 --psm 6'
+                text = pytesseract.image_to_string(img_final, lang='deu+spa', config=custom_config)
                 
-                # 3. KARTEN-VORSCHAU (Málaga Zentrum als Startpunkt)
-                # Später können wir hier Adressen suchen
-                df = pd.DataFrame({'lat': [36.7212], 'lon': [-4.4214]})
-
+                # --- DATEN-CHECK ---
+                afo = "Ja" if "AFO" in text.upper() else "Nicht erkannt"
+                # Suche nach Preisen (z.B. 250.000 €)
+                preise = re.findall(r'\d+(?:\.\d+)?(?:\,\d+)?\s?€', text)
+                
                 # ANZEIGE
-                st.markdown("### 📊 Analyse-Ergebnisse")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Gefundene Preise", preis[0] if preis else "n.a.")
-                    st.metric("Fläche", m2[0] if m2 else "n.a.")
-                with col2:
-                    st.info(f"**AFO Status:** {afo}")
-                    st.warning("**Boden:** Rústico Check empfohlen!")
+                st.markdown("### 📊 Extrahiert aus Foto/Screenshot")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.metric("Preis-Schätzung", preise[0] if preise else "Prüfen...")
+                with c2:
+                    st.info(f"**Rechtlicher Hinweis:** {afo}")
+                
+                st.map(pd.DataFrame({'lat': [36.7212], 'lon': [-4.4214]}))
+                
+                with st.expander("Gelesenen Text anzeigen (Rohdaten)"):
+                    st.write(text)
 
-                st.markdown("### 📍 Lage (Vorschau)")
-                st.map(df)
-                
-                st.markdown("### 📝 Extrahierter Text")
-                st.code(text)
-                
             except Exception as e:
-                st.error("Bitte erst die 'packages.txt' in GitHub erstellen!")
-                st.info(f"Technischer Fehler: {e}")
-
+                st.error(f"Fehler bei Foto-Analyse: {e}")
+                st.info("Tipp: Halte das Handy beim Fotografieren möglichst parallel zum Papier.")
