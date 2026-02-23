@@ -6,7 +6,7 @@ import requests
 from openai import OpenAI
 from fake_useragent import UserAgent
 
-# 1. SYSTEM-INSTALLATION FÜR LINK-SCRAPER
+# 1. SYSTEM-INSTALLATION FÜR BROWSER-ZUGRIFF
 def ensure_playwright_browsers():
     if not os.path.exists("/home/appuser/.cache/ms-playwright"):
         try:
@@ -23,7 +23,7 @@ groq_key = st.secrets.get("GROQ_API_KEY")
 client = OpenAI(api_key=openai_key) if openai_key else None
 ua = UserAgent()
 
-# 3. INTERFACE
+# 3. INTERFACE (APPLE-OPTIMIERT)
 st.title("🤖 Málaga Invest-Zentrale")
 
 anzeigen_link = st.text_input("🔗 Link zur Immobilien-Anzeige:", placeholder="Link hier einfügen...")
@@ -38,7 +38,7 @@ with col_preis:
 itp = preis * 0.07
 st.success(f"💰 ITP (7%): {itp:,.0f} € | Gesamt: {preis + itp:,.0f} €")
 
-# 4. CHAT-SYSTEM MIT LINK-ZUGRIFF
+# 4. CHAT-SYSTEM MIT LINK-KONTEXT
 st.subheader("💬 Chat mit deinem Experten")
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -53,13 +53,11 @@ if prompt := st.chat_input("Frage stellen..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Vorbereitung der Information für die KI
-        # Falls ein Link vorhanden ist, wird dieser im System-Prompt erwähnt
-        system_info = "Du bist Immobilien-Experte für Málaga. Analysiere Risiken."
-        if anzeigen_link:
-            system_info += f" Analysiere besonders die Details aus diesem Link: {anzeigen_link}"
+        # Wir geben der KI den Link als Arbeitsanweisung mit
+        link_info = f" Analysiere bitte diesen Link für Details: {anzeigen_link}" if anzeigen_link else ""
+        system_msg = f"Du bist ein Immobilien-Experte für Málaga. Prüfe Risiken (AFO, DAFO, suelo rústico).{link_info}"
 
-        # Nutzt bevorzugt Groq (Vermeidung von OpenAI Quota-Fehler)
+        # Priorität auf Groq, um Quota-Fehler zu vermeiden
         if groq_key:
             try:
                 url = "https://api.groq.com/openai/v1/chat/completions"
@@ -67,7 +65,7 @@ if prompt := st.chat_input("Frage stellen..."):
                 payload = {
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role": "system", "content": system_info},
+                        {"role": "system", "content": system_msg},
                         {"role": "user", "content": f"Objekt: {objekt}, {preis}€. Aufgabe: {prompt}"}
                     ]
                 }
@@ -76,19 +74,19 @@ if prompt := st.chat_input("Frage stellen..."):
                 st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
             except Exception:
-                st.error("KI-Dienst aktuell verzögert.")
+                st.error("KI-Service aktuell verzögert.")
         else:
-            st.warning("Kein KI-Key gefunden. Bitte in den Secrets hinterlegen.")
+            st.warning("Kein Groq-Key in den Secrets gefunden.")
 
-# 5. ANALYSE-ERGEBNISSE & LINKS
+# 5. DIREKTE ANALYSE-LINKS
 st.divider()
 if st.button("🚀 VOLLSTÄNDIGE ANALYSE STARTEN", use_container_width=True):
-    st.info("Markt-Daten und Standort-Details werden abgerufen...")
+    st.info("Markt-Check wird durchgeführt...")
     map_data = pd.DataFrame({'lat': [36.72], 'lon': [-4.42]})
     st.map(map_data)
     
-    # Ermöglicht das direkte Aufrufen von Recherche-Links
+    # Ermöglicht dir den direkten Absprung aus der Seite
     if anzeigen_link:
-        st.link_button("👉 Direkt zur Anzeige wechseln", anzeigen_link)
+        st.link_button("👉 Zur Original-Anzeige wechseln", anzeigen_link)
 
-st.caption("✅ System: Link-Analyse aktiv | Groq/OpenAI | ITP 7%")
+st.caption("✅ System: Link-Analyse bereit | Groq aktiv | ITP 7%")
