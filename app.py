@@ -1,49 +1,58 @@
 import streamlit as st
-import google.generativeai as genai
+import requests
+import base64
 from PIL import Image
+import io
 from fpdf import FPDF
 
 # --- SETUP ---
-st.set_page_config(page_title="Málaga Invest: NOTFALL-SYSTEM")
+st.set_page_config(page_title="Málaga Invest: FORCE", layout="wide")
 
-if "GEMINI_API_KEY" not in st.secrets:
-    st.error("🔑 API Key fehlt!")
-    st.stop()
+api_key = st.secrets.get("GEMINI_API_KEY")
 
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+def analyze_direct(image_files, prompt_text):
+    # WIR ERZWINGEN HIER DIE STABILE V1 VERSION MANUELL
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    headers = {'Content-Type': 'application/json'}
+    
+    parts = [{"text": prompt_text}]
+    for f in image_files:
+        img_data = base64.b64encode(f.getvalue()).decode("utf-8")
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": img_data
+            }
+        })
+    
+    payload = {"contents": [{"parts": parts}]}
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
 
-# NOTFALL-MODELL: Wir nutzen das stabilste verfügbare Modell
-# 'gemini-pro-vision' ist der sicherste Anker gegen 404 Fehler
-model = genai.GenerativeModel('gemini-pro-vision')
+# --- UI ---
+st.title("🛡️ Invest-Scout: Erzwinge Verbindung")
+st.write("Diese Version umgeht alle fehlerhaften Bibliotheken.")
 
-st.title("🛡️ Invest-Scout: Notfall-Anbindung")
-st.warning("Wir nutzen jetzt das Hochstabilitäts-Modell, um den 404-Fehler zu umgehen.")
+files = st.file_uploader("Screenshots:", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-files = st.file_uploader("Bilder hochladen:", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+if files and st.button("🚀 ANALYSE JETZT ERZWINGEN"):
+    with st.spinner("Direktverbindung zu Google wird aufgebaut..."):
+        prompt = "Analysiere als Malaga-Experte: AFO-Status, Rústico/Urbano, Preis m2 und Risiko-Fazit."
+        result = analyze_direct(files, prompt)
+        
+        if "candidates" in result:
+            answer = result["candidates"][0]["content"]["parts"][0]["text"]
+            st.session_state["final_text"] = answer
+            st.markdown(answer)
+        else:
+            st.error(f"Google meldet Fehler: {result}")
+            st.info("Überprüfe, ob der API-Key in den Secrets korrekt gespeichert ist.")
 
-if files:
-    if st.button("🚀 ANALYSE STARTEN"):
-        with st.spinner("🤖 Kontaktiere Google Hochsicherheits-Server..."):
-            try:
-                # Bildvorbereitung
-                imgs = [Image.open(f) for f in files]
-                prompt = "Analysiere diese Immobilien-Screenshots auf AFO-Status, Preis pro m2 und Investment-Risiko in Malaga."
-                
-                # Der stabilste Aufruf-Weg
-                response = model.generate_content([prompt] + imgs)
-                
-                if response.text:
-                    st.session_state['notfall_result'] = response.text
-                    st.markdown(response.text)
-            except Exception as e:
-                # Falls auch das nicht geht, liegt es am API-Key selbst
-                st.error(f"⚠️ Letzter Schnittstellen-Fehler: {e}")
-                st.info("Sollte dies scheitern, erstelle bitte einen neuen API-Key unter aistudio.google.com")
-
-if 'notfall_result' in st.session_state:
+if "final_text" in st.session_state:
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    clean = st.session_state['notfall_result'].encode('latin-1', 'replace').decode('latin-1')
+    clean = st.session_state["final_text"].encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=clean)
-    st.download_button("📄 PDF Speichern", data=bytes(pdf.output()), file_name="Analyse.pdf")
+    st.download_button("📄 Bericht speichern", data=bytes(pdf.output()), file_name="Analyse.pdf")
