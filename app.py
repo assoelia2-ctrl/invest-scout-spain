@@ -7,42 +7,44 @@ import io
 # --- 1. SETUP ---
 st.set_page_config(page_title="Málaga Invest Expert", layout="wide", page_icon="🛡️")
 
+# Sicherstellen, dass der Key da ist
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("🔑 GROQ_API_KEY fehlt in den Streamlit-Secrets!")
+    st.error("❌ Kritischer Fehler: GROQ_API_KEY fehlt in den Secrets!")
     st.stop()
 
 groq_key = st.secrets["GROQ_API_KEY"]
 
-# --- 2. BILD-OPTIMIERUNG (Verhindert Abstürze) ---
+# --- 2. BILD-OPTIMIERUNG (Verhindert Daten-Stau) ---
 def process_image(image_file):
     img = Image.open(image_file)
     if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+    # Verkleinerung für stabile Übertragung
     img.thumbnail((1024, 1024)) 
     buffered = io.BytesIO()
     img.save(buffered, format="JPEG", quality=80)
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-# --- 3. UI ---
-st.title("🛡️ Invest-Scout: Finaler Risiko-Check")
-st.info("Lade Screenshots (Idealista, Fotos etc.) hoch. Ich prüfe Recht, Boden & Zustand.")
+# --- 3. BENUTZEROBERFLÄCHE ---
+st.title("🛡️ Invest-Scout: Finale Version")
+st.info("Lade deine Screenshots hoch. Ich prüfe Recht, Boden & Zustand mit dem neuesten Experten-Modell.")
 
 uploaded_files = st.file_uploader(
-    "Bilder auswählen:", 
+    "Screenshots wählen:", 
     type=["jpg", "png", "jpeg"], 
     accept_multiple_files=True
 )
 
 if uploaded_files:
-    st.success(f"✅ {len(uploaded_files)} Bilder bereit.")
+    st.success(f"✅ {len(uploaded_files)} Bilder bereit zur Analyse.")
     
     if st.button("🚀 TIEFENPRÜFUNG STARTEN", use_container_width=True):
-        with st.spinner("Experten-Analyse läuft..."):
+        with st.spinner("KI-Experte führt Risiko-Check durch..."):
             try:
-                # Master-Prompt mit all deinen Anforderungen
+                # Dein spezialisierter Prompt für Málaga
                 content_list = [{
                     "type": "text", 
                     "text": """DU BIST EIN IMMOBILIEN-EXPERTE FÜR ANDALUSIEN.
-                    Analysiere diese Bilder GEMEINSAM auf:
+                    Analysiere alle Bilder GEMEINSAM auf:
                     1. RECHTLICHE RISIKEN: Suche nach AFO, DAFO, Suelo Rústico, Ocupado, Proindiviso.
                     2. STANDORT & BODEN: Bewerte Bodenbeschaffenheit und Lage (Urbano/Rústico).
                     3. ZUSTAND: Analyse von Bausubstanz, Pool, Dach & Renovierungsstau.
@@ -56,7 +58,7 @@ if uploaded_files:
                         "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}
                     })
                 
-                # --- DAS NEUE STABILE MODELL ---
+                # --- DAS AKTUELLE PRODUKTIONS-MODELL ---
                 payload = {
                     "model": "llama-3.2-90b-vision-preview",
                     "messages": [{"role": "user", "content": content_list}],
@@ -65,26 +67,24 @@ if uploaded_files:
                 
                 res = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {groq_key}"},
-                    json=payload
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=60
                 )
                 
                 if res.status_code == 200:
+                    st.markdown("---")
                     st.markdown("### 📋 Analyse-Ergebnis")
                     st.markdown(res.json()['choices'][0]['message']['content'])
                 else:
-                    # Falls Groq das Modell wieder nicht findet, versuchen wir automatisch das Backup
-                    st.warning("Hauptmodell überlastet. Nutze Backup-Analyse...")
-                    payload["model"] = "llama-3.2-11b-vision-preview" 
-                    res = requests.post("https://api.groq.com/openai/v1/chat/completions", 
-                                         headers={"Authorization": f"Bearer {groq_key}"}, json=payload)
-                    if res.status_code == 200:
-                        st.markdown(res.json()['choices'][0]['message']['content'])
-                    else:
-                        st.error(f"Kritischer Fehler: {res.status_code}")
-                        st.write(res.text)
+                    st.error(f"⚠️ Schnittstellen-Meldung: {res.status_code}")
+                    # Zeige hilfreiche Tipps statt nur Fehlercodes
+                    if res.status_code == 400:
+                        st.warning("Modell-Wechsel bei Groq erkannt. Bitte starte die App einmal neu (Reboot).")
+                    st.expander("Details anzeigen").write(res.text)
+
             except Exception as e:
-                st.error(f"Technischer Fehler: {e}")
+                st.error(f"🆘 Technischer Fehler: {e}")
 
 st.divider()
-st.caption("Version 5.0 - Stabilitäts-Update")
+st.caption("Version 6.0 - Produktions-Modell Llama 3.2 90B")
