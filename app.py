@@ -5,82 +5,70 @@ import os
 from PIL import Image
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Andalusien AI Expert", layout="wide")
+st.set_page_config(page_title="Andalusien AI Expert Pro", layout="wide")
 
-# Hier deinen Key eingeben oder über Sidebar steuern
-api_key = st.sidebar.text_input("Gemini API Key eingeben", type="password")
+# Sidebar für Einstellungen
+with st.sidebar:
+    st.header("⚙️ Einstellungen")
+    api_key = st.text_input("Gemini API Key eingeben", type="password")
+    st.info("Den Key erhältst du kostenlos im Google AI Studio.")
 
+# KI-Modell initialisieren
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') # Schnelles Vision-Modell
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
 def analyze_image(img):
-    """Sendet das Bild an die KI zur Investment-Analyse"""
+    """Der spezialisierte Analyse-Prompt für andalusische Immobilien"""
     prompt = """
-    Du bist ein erfahrener Immobilien-Gutachter in Andalusien. 
-    Analysiere diesen Screenshot einer Immobilie/eines Grundstücks:
-    1. Zustand von Dach und Fassade (Renovierungsstau?).
-    2. Beurteilung der Zufahrt und des Geländes (Schatten, Boden).
-    3. Solar-Potential (Dachausrichtung/Hindernisse).
-    4. Nachbarschaft/Lage-Eindruck.
-    Gib mir kurz und prägnant:
-    - TOP 3 CHANCEN
-    - TOP 3 RISIKEN
+    Du bist ein zertifizierter Baugutachter für Immobilien in Andalusien (Spanien). 
+    Analysiere diesen Screenshot technisch und investitionsorientiert nach folgenden Kriterien:
+
+    1. SUBSTANZ-CHECK: 
+       - Achte auf Feuchtigkeitsränder an Fassaden (Salpeter/Humedad). 
+       - Prüfe den Zustand der Dachziegel (Tejas) und Regenrinnen.
+       - Sind statische Risse über Fenstern oder an Gebäudeecken erkennbar?
+
+    2. TOPOGRAPHIE & ZUFAHRT:
+       - Ist der Weg 'asfaltado' (asphaltiert) oder ein 'carril' (Feldweg)? 
+       - Schätze die Steigung der Zufahrt (Befahrbarkeit für LKW/Baustellenfahrzeuge).
+       - Vegetation: Erkennst du geschützte Bäume wie Oliven oder Korkeichen im Baufeld?
+
+    3. SCHATTEN & ENERGIE:
+       - Analysiere den Schattenwurf von Nachbargebäuden oder Bergen (Nordhang-Risiko?).
+       - Schätze die nutzbare Dachfläche für Photovoltaik (Süd-Ausrichtung).
+
+    4. INFRASTRUKTUR:
+       - Siehst du Strommasten, Wassertanks (Depósitos) oder Glasfaser-Anschlüsse?
+
+    Gliedere deine Antwort strikt und übersichtlich in:
+    - 🚩 RISIKEN (Baulich, Lage & Rechtlich)
+    - ✨ CHANCEN (Aufwertungspotenzial & Cashflow)
+    - 💶 SCHÄTZUNG (Grobe Richtung für sofortige Instandsetzungskosten)
     """
     response = model.generate_content([prompt, img])
     return response.text
 
 def main():
     st.title("☀️ Andalusien Real Estate AI-Expert")
-    st.subheader("Automatischer Risiko- & Chancen-Check")
+    st.write("Dein digitaler Gutachter für den spanischen Immobilienmarkt.")
 
+    # Datei-Upload
     Dateien = st.file_uploader("Objekt-Screenshots hochladen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
     if Dateien:
         if not api_key:
-            st.warning("Bitte gib links in der Sidebar deinen API-Key ein, um die KI-Analyse zu starten.")
+            st.error("❌ Bitte gib zuerst deinen API-Key in der Sidebar ein!")
+            return
         
         objekt_ergebnisse = []
 
         for i, d in enumerate(Dateien):
-            col1, col2 = st.columns([1, 1])
+            st.markdown(f"---")
+            col1, col2 = st.columns([1, 1.2])
+            
             img = Image.open(d)
             
             with col1:
-                st.image(img, caption=f"Objekt {i+1}", use_container_width=True)
-                stadt = st.text_input(f"Stadt/Lage ({i})", key=f"s_{i}")
-                preis = st.number_input(f"Kaufpreis € ({i})", key=f"p_{i}")
-
-            with col2:
-                if st.button(f"🔍 KI-Analyse starten für Objekt {i+1}", key=f"btn_{i}"):
-                    with st.spinner("KI untersucht das Bild..."):
-                        analyse_text = analyze_image(img)
-                        st.session_state[f"analysis_{i}"] = analyse_text
-                
-                if f"analysis_{i}" in st.session_state:
-                    st.markdown("### 🤖 KI-Gutachten")
-                    st.write(st.session_state[f"analysis_{i}"])
-                    
-                    objekt_ergebnisse.append({
-                        "stadt": stadt,
-                        "preis": preis,
-                        "analyse": st.session_state[f"analysis_{i}"],
-                        "file": d
-                    })
-
-        if objekt_ergebnisse and st.button("🚀 Profi-Report als PDF exportieren"):
-            pdf = FPDF()
-            for obj in objekt_ergebnisse:
-                pdf.add_page()
-                pdf.set_font("Arial", 'B', 16)
-                pdf.cell(0, 10, f"Exposé: {obj['stadt']}", ln=1)
-                pdf.set_font("Arial", '', 11)
-                pdf.multi_cell(0, 7, f"\nKI-ANALYSE:\n{obj['analyse']}")
-                # Bild hinzufügen (vereinfacht)
-                # ... (Bild-Export-Logik wie gehabt)
-            
-            pdf.output("Andalusien_Expert_Report.pdf")
-            st.success("Dossier mit KI-Gutachten erstellt!")
-
-if __name__ == "__main__":
-    main()
+                st.image(img, caption=f"Original Screenshot {i+1}", use_container_width=True)
+                stadt = st.text_input(f"Stadt / Region", key=f"stadt_{i}", placeholder="z.B. Nerja,
