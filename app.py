@@ -1,48 +1,56 @@
 import streamlit as st
 from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
+import gc
 
-# 1. SETUP
-st.set_page_config(page_title="Invest-Scout: Finaler Fix", layout="wide")
+st.set_page_config(page_title="Invest-Scout: Multi-Scan", layout="wide")
 
-# Speicher für Text anlegen, falls er noch nicht da ist
-if 'text' not in st.session_state:
-    st.session_state['text'] = ""
+if 'gesamter_text' not in st.session_state:
+    st.session_state['gesamter_text'] = []
 
-st.title("🛡️ Invest-Scout: Foto- & Screenshot-Garantie")
+st.title("🛡️ Invest-Scout: Multi-Upload")
 
-# 2. DER UPLOADER (isoliert in einer Variablen)
-datei = st.file_uploader("Bild/Foto hochladen:", type=["jpg", "png", "jpeg"], key="uploader_vfinal")
+# 1. Multi-Uploader aktivieren
+dateien = st.file_uploader("Mehrere Fotos/Screenshots wählen:", 
+                            type=["jpg", "png", "jpeg"], 
+                            accept_multiple_files=True, # WICHTIG
+                            key="multi_v13")
 
-# 3. DIE "SICHERHEITS-SCHLEUSE"
-# Wir nutzen try/except, damit der NameError die App nicht mehr killen kann
-try:
-    if datei is not None:
-        img = Image.open(datei)
-        st.image(img, caption="Datei erfolgreich erkannt", use_container_width=True)
+if dateien:
+    if st.button("🚀 ALLE BILDER ANALYSIEREN"):
+        st.session_state['gesamter_text'] = [] # Reset für neuen Durchlauf
         
-        if st.button("🚀 ANALYSE STARTEN"):
-            with st.spinner("KI liest Dokument..."):
-                # Foto-Rettung (Aufpumpen auf 3-fache Größe)
-                w, h = img.size
-                img_big = img.resize((w*3, h*3), Image.Resampling.LANCZOS)
-                
-                # Vorverarbeitung
-                proc = ImageOps.grayscale(img_big)
-                proc = ImageEnhance.Contrast(proc).enhance(2.5)
-                
-                # OCR (Texterkennung)
-                st.session_state['text'] = pytesseract.image_to_string(proc, lang='deu+spa')
-                st.success("Analyse abgeschlossen!")
+        for i, datei in enumerate(dateien):
+            with st.status(f"Verarbeite Bild {i+1} von {len(dateien)}...") as status:
+                try:
+                    img = Image.open(datei)
+                    
+                    # 95KB Rettung & RAM-Schutz
+                    img_big = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
+                    proc = ImageOps.grayscale(img_big)
+                    proc = ImageEnhance.Contrast(proc).enhance(2.0)
+                    
+                    text = pytesseract.image_to_string(proc, lang='deu+spa')
+                    st.session_state['gesamter_text'].append(f"--- Datei {i+1} ---\n{text}")
+                    
+                    # RAM sofort leeren nach jedem Bild
+                    del img
+                    del img_big
+                    del proc
+                    gc.collect()
+                    status.update(label=f"Bild {i+1} fertig!", state="complete")
+                except Exception as e:
+                    st.error(f"Fehler bei Bild {i+1}: {e}")
 
-except NameError:
-    st.warning("Warte auf Datei-Upload...")
-except Exception as e:
-    st.error(f"Technischer Fehler: {e}")
-
-# 4. ERGEBNISSE & RECHERCHE
-if st.session_state['text']:
+# 2. Anzeige der gesammelten Ergebnisse
+if st.session_state['gesamter_text']:
     st.divider()
-    st.markdown("### [🔍 Dubletten im Internet prüfen](https://www.google.com/search?q=Málaga+Immobilie+Invest+Check)")
-    with st.expander("Gelesene Daten"):
-        st.write(st.session_state['text'])
+    st.success(f"{len(st.session_state['gesamter_text'])} Dokumente analysiert.")
+    
+    combined = "\n\n".join(st.session_state['gesamter_text'])
+    
+    with st.expander("Gesamten Text anzeigen"):
+        st.text_area("Ergebnisse:", value=combined, height=400)
+    
+    # Recherche-Link (Nutzt das erste erkannte Stichwort)
+    st.markdown("### [🔍 Kombinierte Recherche starten](https://www.google.com/search?q=Málaga+Immobilie+Invest+Check)")
