@@ -4,80 +4,105 @@ from PIL import Image
 from fpdf import FPDF
 import io
 
-# 1. API Setup
+# --- 1. KONFIGURATION ---
+st.set_page_config(page_title="Andalusien Invest Scout", layout="wide")
+
+# API-Key aus den Secrets laden
 api_key = st.secrets.get("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
+else:
+    st.error("API-Key fehlt in den Secrets!")
 
-st.set_page_config(page_title="Andalusien Invest Scout", layout="wide")
-st.title("☀️ Andalusien Real Estate Master")
+# --- 2. HILFSFUNKTIONEN ---
 
-# 2. System-Check (Sidebar)
-with st.sidebar:
-    st.header("System-Check")
+def get_best_model():
+    """Findet das beste verfügbare KI-Modell auf dem Server"""
     try:
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        selected_model = "models/gemini-1.5-flash" if "models/gemini-1.5-flash" in available_models else available_models[0]
-        st.success(f"Modell aktiv: {selected_model}")
-    except Exception as e:
-        st.error(f"Verbindungsproblem: {e}")
-        selected_model = None
+        available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        if "models/gemini-1.5-flash" in available:
+            return "models/gemini-1.5-flash"
+        return available[0] if available else None
+    except:
+        return None
 
-# 3. PDF Generator Funktion
 def create_pdf(text, image):
+    """Erstellt ein sauberes PDF-Gutachten"""
     pdf = FPDF()
     pdf.add_page()
     
-    # Titel
+    # Header
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Objekt-Gutachten: Andalusien Invest", ln=True, align='C')
+    pdf.cell(0, 10, "Immobilien-Analyse: Andalusien", ln=True, align='C')
     pdf.ln(10)
     
-    # Bild einfügen (Temporär speichern für PDF)
+    # Bild einfügen
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
-    pdf.image(img_byte_arr, x=10, y=30, w=100)
-    pdf.ln(70) # Platzhalter für das Bild
+    pdf.image(img_byte_arr, x=10, y=30, w=90)
+    pdf.ln(80)
     
-    # Analyse-Text
+    # Analyse-Text (Sonderzeichen-Safe)
     pdf.set_font("Arial", size=11)
-    # Entferne Markdown-Sterne für sauberen PDF-Text
-    clean_text = text.replace("**", "").replace("*", "-")
-    pdf.multi_cell(0, 8, clean_text)
+    clean_text = text.replace("**", "").replace("*", "-").replace("€", "Euro")
+    # Umwandlung für PDF-Kompatibilität
+    pdf.multi_cell(0, 8, clean_text.encode('latin-1', 'ignore').decode('latin-1'))
     
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# 4. Haupt-Logik
-uploaded_file = st.file_uploader("Screenshot hochladen", type=['png', 'jpg', 'jpeg'])
+# --- 3. APP OBERFLÄCHE ---
+
+st.title("☀️ Andalusien Real Estate Master")
+st.write("Lade einen Screenshot hoch, um ein KI-gestütztes Gutachten zu erstellen.")
+
+# Modell-Check in der Sidebar
+selected_model = get_best_model()
+with st.sidebar:
+    if selected_model:
+        st.success(f"KI bereit: {selected_model.split('/')[-1]}")
+    else:
+        st.error("KI-Modell nicht erreichbar.")
+
+uploaded_file = st.file_uploader("Screenshot (Idealista, Fotocasa etc.)", type=['png', 'jpg', 'jpeg'])
 
 if uploaded_file and selected_model:
     img = Image.open(uploaded_file)
-    st.image(img, width=500, caption="Hochgeladenes Objekt")
+    st.image(img, width=500, caption="Vorschau des Objekts")
     
-    if st.button("🔍 Analyse starten"):
-        with st.spinner("KI-Gutachter erstellt Analyse..."):
+    if st.button("🔍 KI-Gutachten jetzt erstellen"):
+        with st.spinner("Analysiere Bausubstanz und Lage..."):
             try:
                 model = genai.GenerativeModel(selected_model)
-                prompt = "Du bist Baugutachter in Andalusien. Analysiere Substanz, Zufahrt und Solar-Potential. Gliedere in RISIKEN, CHANCEN, KOSTEN."
+                prompt = """
+                Du bist ein zertifizierter Baugutachter in Andalusien. 
+                Analysiere diesen Screenshot detailliert:
+                1. BAUSUBSTANZ: Risse, Salpeter (Humedad), Zustand der Fassade.
+                2. ZUFAHRT: Ist es ein Carril (Schotterweg) oder asphaltiert?
+                3. SOLAR: Potenzial für Photovoltaik und Schattenwurf.
+                Antworte strukturiert in: 🚩 RISIKEN, ✨ CHANCEN und 💶 KOSTENSCHÄTZUNG.
+                """
                 response = model.generate_content([prompt, img])
                 
-                # Ergebnis speichern
-                st.session_state['last_analysis'] = response.text
-                st.session_state['last_img'] = img
-                
+                # In Session speichern, damit es beim PDF-Klick nicht verschwindet
+                st.session_state['analysis_text'] = response.text
+                st.session_state['current_img'] = img
             except Exception as e:
-                st.error(f"Fehler: {e}")
+                st.error(f"Fehler bei der Analyse: {e}")
 
-    # Wenn Analyse vorhanden, zeige Ergebnis und PDF-Button
-    if 'last_analysis' in st.session_state:
-        st.markdown("### Analyse-Ergebnis")
-        st.write(st.session_state['last_analysis'])
-        
-        # PDF Button
-        pdf_data = create_pdf(st.session_state['last_analysis'], st.session_state['last_img'])
+# Ergebnis-Anzeige & PDF Download
+if 'analysis_text' in st.session_state:
+    st.divider()
+    st.markdown("### Dein Gutachten")
+    st.write(st.session_state['analysis_text'])
+    
+    # PDF Button
+    try:
+        pdf_data = create_pdf(st.session_state['analysis_text'], st.session_state['current_img'])
         st.download_button(
-            label="📥 Gutachten als PDF herunterladen",
+            label="📥 Als PDF herunterladen",
             data=pdf_data,
             file_name="Andalusien_Gutachten.pdf",
             mime="application/pdf"
         )
+    except Exception as e:
+        st.warning(f"PDF-Vorschau bereit, Button wird generiert... ({e})")
